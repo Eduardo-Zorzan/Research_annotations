@@ -14,12 +14,7 @@ struct Asset;
 #[tokio::main]
 async fn main() {
     // build our application with a single route
-    let app = Router::new().route("/home", get(static_handler)).route(
-        "/home2",
-        get(static_handler)
-            .post(static_handler)
-            .patch(static_handler),
-    );
+    let app = Router::new().fallback(static_handler);
 
     // run our app with hyper, listening globally on port 3000
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
@@ -28,12 +23,11 @@ async fn main() {
 
 // 2. The handler that resolves embedded files
 async fn static_handler(uri: Uri) -> impl IntoResponse {
-    let mut path = "html/home.html".to_string();
+    let path = uri.path().trim_start_matches('/');
 
-    // Attempt to serve the requested file
-    match Asset::get(&path) {
+    match Asset::get(path) {
         Some(content) => {
-            let mime = mime_guess::from_path(&path).first_or_octet_stream();
+            let mime = mime_guess::from_path(path).first_or_octet_stream();
             Response::builder()
                 .status(StatusCode::OK)
                 .header(header::CONTENT_TYPE, mime.as_ref())
@@ -41,10 +35,9 @@ async fn static_handler(uri: Uri) -> impl IntoResponse {
                 .unwrap()
         }
         None => {
-            // SPA Fallback: If file isn't found and request doesn't look like an asset (e.g. no extension),
-            // return index.html for client-side routing (React Router, Vue Router, etc.)
+            // Fallback: if no file extension, serve home.html (SPA-style)
             if !path.contains('.') {
-                if let Some(content) = Asset::get("home.html") {
+                if let Some(content) = Asset::get("html/home.html") {
                     return Response::builder()
                         .status(StatusCode::OK)
                         .header(header::CONTENT_TYPE, "text/html")
@@ -52,7 +45,6 @@ async fn static_handler(uri: Uri) -> impl IntoResponse {
                         .unwrap();
                 }
             }
-            // Otherwise, return 404
             Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .header(header::CONTENT_TYPE, "text/plain")
@@ -60,4 +52,5 @@ async fn static_handler(uri: Uri) -> impl IntoResponse {
                 .unwrap()
         }
     }
+
 }

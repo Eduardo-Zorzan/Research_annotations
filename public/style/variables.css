@@ -1,0 +1,19 @@
+:root {
+  --color-sidebar-bg: hsl(220, 18%, 22%);
+  --color-sidebar-text: hsl(0, 0%, 95%);
+  --color-sidebar-btn-bg: hsl(220, 14%, 38%);
+  --color-sidebar-btn-hover: hsl(220, 14%, 45%);
+
+  --color-accent: hsl(210, 60%, 55%);
+  --color-accent-hover: hsl(210, 60%, 45%);
+
+  --color-main-bg: hsl(220, 14%, 92%);
+
+  --color-table-border: hsl(220, 10%, 75%);
+  --color-table-header-bg: hsl(220, 14%, 86%);
+
+  --color-text-primary: hsl(220, 18%, 20%);
+  --color-text-secondary: hsl(220, 10%, 45%);
+
+  --color-settings-icon: hsl(220, 10%, 45%);
+}

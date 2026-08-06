@@ -1,0 +1,14 @@
+// Project tasks configuration. See https://zed.dev/docs/tasks for documentation.
+//
+// Example:
+[
+  {
+    "label": "Run",
+    "command": "kill -9 $(lsof -t -i:3000) & cargo run ", //"args": [],
+    "use_new_terminal": false,
+    "reveal": "never",
+    "reveal_target": "dock",
+    "hide": "always",
+    "allow_concurrent_runs": true
+  },
+]
