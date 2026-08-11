@@ -4,7 +4,7 @@
 [
   {
     "label": "Run",
-    "command": "kill -9 $(lsof -t -i:3000) & cargo run ", //"args": [],
+    "command": "kill -9 $(lsof -t -i:3000) & npx tsc & cargo run ", //"args": [],
     "use_new_terminal": false,
     "reveal": "never",
     "reveal_target": "dock",

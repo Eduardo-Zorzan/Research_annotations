@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ES2020",
+    "outDir": "./public/js",
+    "rootDir": "./frontend/src",
+    "strict": true
+  },
+  "include": ["frontend/src/**/*.ts"]
+}
