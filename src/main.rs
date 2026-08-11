@@ -1,22 +1,26 @@
 mod database;
 mod handlers;
+mod helpers;
+
+use std::sync::{Arc, Mutex};
 
 use database::default;
-use handlers::{assets, home};
+use handlers::{assets, home, tables};
 
 use axum::{Router, routing::get};
 use rusqlite::Connection;
 
+use crate::helpers::{routes::GET_TABLES, types::Conn};
+
 #[tokio::main]
 async fn main() {
-    let conn = match Connection::open("my_database.db") {
-        Ok(it) => it,
-        Err(_err) => return,
-    };
+    let conn: Conn = Arc::new(Mutex::new(Connection::open("my_database.db").unwrap()));
 
-    default::create_default_tables(conn);
+    default::create_default_tables(&conn);
 
     let app = Router::new()
+        .route(GET_TABLES, get(tables::get_tables))
+        .with_state(conn)
         .route("/", get(home::get_home))
         .fallback(assets::static_handler);
 
