@@ -10,7 +10,10 @@ use handlers::{assets, home, tables};
 use axum::{Router, routing::get};
 use rusqlite::Connection;
 
-use crate::helpers::{routes::GET_TABLES, types::Conn};
+use crate::helpers::{
+    routes::{GET_HOME, GET_TABLES},
+    types::Conn,
+};
 
 #[tokio::main]
 async fn main() {
@@ -20,8 +23,8 @@ async fn main() {
 
     let app = Router::new()
         .route(GET_TABLES, get(tables::get_tables))
+        .route(GET_HOME, get(home::get_home))
         .with_state(conn)
-        .route("/", get(home::get_home))
         .fallback(assets::static_handler);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
