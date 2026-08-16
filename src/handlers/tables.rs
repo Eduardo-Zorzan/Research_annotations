@@ -35,6 +35,7 @@ pub async fn get(
                 SELECT id, description
                 FROM tables
                 WHERE user_id = ?1
+                ORDER BY description
             ",
         )
         .unwrap();
@@ -56,20 +57,27 @@ pub async fn get(
 pub async fn post(
     State(conn): State<helpers::types::Conn>,
     Json(payload): Json<Table>,
-) -> Result<StatusCode, StatusCode> {
+) -> Result<(StatusCode, Json<TableReturn>), StatusCode> {
     let Ok(_conn) = conn.lock() else {
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     };
 
-    match _conn.execute(
+    match _conn.query_row(
         "
-            INSERT INTO tables
-            (description, user_id)
-            VALUES (?1, ?2)
-        ",
+                INSERT INTO tables (description, user_id)
+                VALUES (?1, ?2)
+                RETURNING id
+            ",
         params![payload.description, payload.user_id],
+        |row| row.get::<_, i32>(0),
     ) {
-        Ok(_) => Ok(StatusCode::OK),
+        Ok(id) => Ok((
+            StatusCode::CREATED,
+            Json(TableReturn {
+                id,
+                description: payload.description,
+            }),
+        )),
         Err(_err) => {
             println!("Error on insert table, error: {}", _err);
             Err(StatusCode::INTERNAL_SERVER_ERROR)

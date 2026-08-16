@@ -40,6 +40,30 @@ export function initSidebarResize(layout, resizeHandle) {
         resizeHandle.classList.remove("active");
     });
 }
+export async function createTable(description, container) {
+    try {
+        const response = await fetch("/tables", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                id: 0,
+                description,
+                user_id: 1,
+            }),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to create table: ${response.statusText}`);
+        }
+        const table = await response.json();
+        await loadTables(container, table.id);
+    }
+    catch (error) {
+        console.error("Error creating table:", error);
+        alert("Failed to create table. Please try again.");
+    }
+}
 export async function updateTable(table, newDescription, container) {
     try {
         const response = await fetch("/tables", {
@@ -88,7 +112,7 @@ export async function deleteTable(table, container) {
 }
 let isGlobalClickListenerInitialized = false;
 let globalTablesContainer = null;
-export async function loadTables(container) {
+export async function loadTables(container, id_active_table = null) {
     globalTablesContainer = container;
     if (!isGlobalClickListenerInitialized) {
         isGlobalClickListenerInitialized = true;
@@ -108,7 +132,14 @@ export async function loadTables(container) {
         const containerTable = document.createElement("div");
         containerTable.dataset.tableId = String(table.id);
         const item = document.createElement("div");
-        item.className = "sidebar_item" + (index === 0 ? " active" : "");
+        item.className = "sidebar_item";
+        const isActive = () => {
+            if (id_active_table)
+                return id_active_table == table.id;
+            return index == 0;
+        };
+        if (isActive())
+            item.className += " active";
         const label = document.createElement("span");
         label.className = "sidebar_item_label";
         label.textContent = table.description;
@@ -233,5 +264,77 @@ export async function loadTables(container) {
         containerTable.appendChild(item);
         containerTable.appendChild(dropdown);
         container.appendChild(containerTable);
+    });
+}
+export function createTempTableCard(container) {
+    const existingTempInput = container.querySelector(".temp_table_card .sidebar_item_input");
+    if (existingTempInput) {
+        existingTempInput.focus();
+        existingTempInput.select();
+        return;
+    }
+    const containerTable = document.createElement("div");
+    containerTable.className = "temp_table_card";
+    const item = document.createElement("div");
+    item.className = "sidebar_item editing";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "sidebar_item_input";
+    input.value = "";
+    input.setAttribute("aria-label", "Table description");
+    const actions = document.createElement("div");
+    actions.className = "sidebar_item_actions";
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "sidebar_item_save";
+    saveBtn.title = "Save";
+    saveBtn.setAttribute("aria-label", "Save");
+    saveBtn.innerHTML = '<i class="fa-solid fa-check"></i>';
+    const cancelBtn = document.createElement("button");
+    cancelBtn.className = "sidebar_item_cancel";
+    cancelBtn.title = "Cancel";
+    cancelBtn.setAttribute("aria-label", "Cancel");
+    cancelBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    item.appendChild(input);
+    item.appendChild(actions);
+    containerTable.appendChild(item);
+    container.prepend(containerTable);
+    input.focus();
+    const handleSave = async () => {
+        const desc = input.value.trim();
+        if (!desc) {
+            input.focus();
+            return;
+        }
+        saveBtn.disabled = true;
+        cancelBtn.disabled = true;
+        await createTable(desc, container);
+    };
+    const handleCancel = () => {
+        containerTable.remove();
+    };
+    saveBtn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        handleSave();
+    });
+    cancelBtn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        handleCancel();
+    });
+    input.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") {
+            ev.preventDefault();
+            handleSave();
+        }
+        else if (ev.key === "Escape") {
+            ev.preventDefault();
+            handleCancel();
+        }
+    });
+}
+export function initAddTable(addBtn, container) {
+    addBtn.addEventListener("click", () => {
+        createTempTableCard(container);
     });
 }
