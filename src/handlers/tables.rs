@@ -1,24 +1,32 @@
 use axum::{
     Json,
     extract::{Path, State},
+    http::StatusCode,
 };
 
 use rusqlite::params;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::helpers;
 
 #[derive(Serialize)]
-pub struct Table {
+pub struct TableReturn {
     id: i32,
     description: String,
 }
 
+#[derive(Deserialize)]
+pub struct Table {
+    id: i32,
+    description: String,
+    user_id: i32,
+}
+
 #[axum::debug_handler]
-pub async fn get_tables(
+pub async fn get(
     State(conn): State<helpers::types::Conn>,
     Path(id): Path<i32>,
-) -> Json<Vec<Table>> {
+) -> Json<Vec<TableReturn>> {
     let _conn = conn.lock().unwrap();
 
     let mut stmt = _conn
@@ -30,9 +38,9 @@ pub async fn get_tables(
             ",
         )
         .unwrap();
-    let tables: Vec<Table> = stmt
+    let tables: Vec<TableReturn> = stmt
         .query_map(params![id], |row| {
-            Ok(Table {
+            Ok(TableReturn {
                 id: row.get(0)?,
                 description: row.get(1)?,
             })
@@ -42,4 +50,78 @@ pub async fn get_tables(
         .unwrap();
 
     Json(tables)
+}
+
+#[axum::debug_handler]
+pub async fn post(
+    State(conn): State<helpers::types::Conn>,
+    Json(payload): Json<Table>,
+) -> Result<StatusCode, StatusCode> {
+    let Ok(_conn) = conn.lock() else {
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    };
+
+    match _conn.execute(
+        "
+            INSERT INTO tables
+            (description, user_id)
+            VALUES (?1, ?2)
+        ",
+        params![payload.description, payload.user_id],
+    ) {
+        Ok(_) => Ok(StatusCode::OK),
+        Err(_err) => {
+            println!("Error on insert table, error: {}", _err);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+#[axum::debug_handler]
+pub async fn put(
+    State(conn): State<helpers::types::Conn>,
+    Json(payload): Json<Table>,
+) -> Result<StatusCode, StatusCode> {
+    let Ok(_conn) = conn.lock() else {
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    };
+    match _conn.execute(
+        "
+                UPDATE tables
+                SET description = ?1
+                WHERE id = ?2
+            ",
+        params![payload.description, payload.id],
+    ) {
+        Ok(0) => Err(StatusCode::NOT_FOUND),
+        Ok(_) => Ok(StatusCode::OK),
+        Err(_err) => {
+            println!("Error on update table, error: {}", _err);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+#[axum::debug_handler]
+pub async fn delete(
+    State(conn): State<helpers::types::Conn>,
+    Json(payload): Json<Table>,
+) -> Result<StatusCode, StatusCode> {
+    let Ok(_conn) = conn.lock() else {
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    };
+
+    match _conn.execute(
+        "
+            DELETE FROM tables
+            WHERE id = ?1;
+        ",
+        params![payload.id],
+    ) {
+        Ok(_) => Ok(StatusCode::OK),
+        Err(_err) => {
+            println!("Error on delete table, error: {}", _err);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
 }

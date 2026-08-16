@@ -39,7 +39,7 @@ pub fn create_default_tables(conn: &Conn) {
                 creation_date TEXT NOT NULL,
                 FOREIGN KEY (table_id)
                     REFERENCES tables(id)
-                    ON DELETE NO ACTION
+                    ON DELETE CASCADE
                     ON UPDATE NO ACTION
             );
         ",

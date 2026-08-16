@@ -59,21 +59,85 @@ export function initSidebarResize(
   });
 }
 
+export async function updateTable(
+  table: Table,
+  newDescription: string,
+  container: HTMLElement
+): Promise<void> {
+  try {
+    const response = await fetch("/tables", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: table.id,
+        description: newDescription,
+        user_id: 1,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update table: ${response.statusText}`);
+    }
+
+    await loadTables(container);
+  } catch (error) {
+    console.error("Error updating table:", error);
+    alert("Failed to update table description. Please try again.");
+  }
+}
+
+export async function deleteTable(
+  table: Table,
+  container: HTMLElement
+): Promise<void> {
+  try {
+    const response = await fetch("/tables", {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: table.id,
+        description: table.description,
+        user_id: 1,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to delete table: ${response.statusText}`);
+    }
+
+    await loadTables(container);
+  } catch (error) {
+    console.error("Error deleting table:", error);
+    alert("Failed to delete table. Please try again.");
+  }
+}
+
+let isGlobalClickListenerInitialized = false;
+let globalTablesContainer: HTMLElement | null = null;
+
 export async function loadTables(container: HTMLElement): Promise<void> {
+  globalTablesContainer = container;
+
+  if (!isGlobalClickListenerInitialized) {
+    isGlobalClickListenerInitialized = true;
+    document.addEventListener("click", (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".sidebar_item_menu") && globalTablesContainer) {
+        globalTablesContainer
+          .querySelectorAll(".sidebar_item_dropdown.open")
+          .forEach((d) => d.classList.remove("open"));
+      }
+    });
+  }
+
   const response = await fetch("/1/tables");
   const tables: Table[] = await response.json();
 
   container.innerHTML = "";
-
-  // Close any open menu when clicking outside
-  document.addEventListener("click", (e: MouseEvent) => {
-    const target = e.target as HTMLElement;
-    if (!target.closest(".sidebar_item_menu")) {
-      container
-        .querySelectorAll(".sidebar_item_dropdown.open")
-        .forEach((d) => d.classList.remove("open"));
-    }
-  });
 
   tables.forEach((table, index) => {
     const containerTable = document.createElement("div");
@@ -88,6 +152,7 @@ export async function loadTables(container: HTMLElement): Promise<void> {
 
     const menuBtn = document.createElement("button");
     menuBtn.className = "sidebar_item_menu";
+    menuBtn.setAttribute("aria-label", "Table options");
     menuBtn.innerHTML = '<i class="fa-solid fa-ellipsis-vertical"></i>';
 
     const dropdown = document.createElement("div");
@@ -107,10 +172,16 @@ export async function loadTables(container: HTMLElement): Promise<void> {
     item.appendChild(label);
     item.appendChild(menuBtn);
 
-    // Select table on click (but not when clicking menu)
+    // Select table on click (when not editing and not clicking menu)
     item.addEventListener("click", (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (target.closest(".sidebar_item_menu") || target.closest(".sidebar_item_dropdown")) return;
+      if (
+        item.classList.contains("editing") ||
+        target.closest(".sidebar_item_menu") ||
+        target.closest(".sidebar_item_dropdown")
+      ) {
+        return;
+      }
       container
         .querySelectorAll(".sidebar_item")
         .forEach((el) => el.classList.remove("active"));
@@ -123,7 +194,9 @@ export async function loadTables(container: HTMLElement): Promise<void> {
       // Close other open dropdowns
       container
         .querySelectorAll(".sidebar_item_dropdown.open")
-        .forEach((d) => { if (d !== dropdown) d.classList.remove("open"); });
+        .forEach((d) => {
+          if (d !== dropdown) d.classList.remove("open");
+        });
 
       if (!dropdown.classList.contains("open")) {
         const rect = menuBtn.getBoundingClientRect();
@@ -133,6 +206,90 @@ export async function loadTables(container: HTMLElement): Promise<void> {
         dropdown.style.right = "auto";
       }
       dropdown.classList.toggle("open");
+    });
+
+    // Rename (switch table card to inline edit mode)
+    renameBtn.addEventListener("click", (e: MouseEvent) => {
+      e.stopPropagation();
+      dropdown.classList.remove("open");
+
+      item.classList.add("editing");
+      item.innerHTML = "";
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "sidebar_item_input";
+      input.value = table.description;
+      input.setAttribute("aria-label", "Table description");
+
+      const actions = document.createElement("div");
+      actions.className = "sidebar_item_actions";
+
+      const saveBtn = document.createElement("button");
+      saveBtn.className = "sidebar_item_save";
+      saveBtn.title = "Save";
+      saveBtn.setAttribute("aria-label", "Save");
+      saveBtn.innerHTML = '<i class="fa-solid fa-check"></i>';
+
+      const cancelBtn = document.createElement("button");
+      cancelBtn.className = "sidebar_item_cancel";
+      cancelBtn.title = "Cancel";
+      cancelBtn.setAttribute("aria-label", "Cancel");
+      cancelBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+
+      actions.appendChild(saveBtn);
+      actions.appendChild(cancelBtn);
+
+      item.appendChild(input);
+      item.appendChild(actions);
+
+      input.focus();
+      input.select();
+
+      const handleSave = async () => {
+        const newDesc = input.value.trim();
+        if (!newDesc) return;
+        if (newDesc === table.description) {
+          await loadTables(container);
+          return;
+        }
+        saveBtn.disabled = true;
+        await updateTable(table, newDesc, container);
+      };
+
+      const handleCancel = () => {
+        loadTables(container);
+      };
+
+      saveBtn.addEventListener("click", (ev: MouseEvent) => {
+        ev.stopPropagation();
+        handleSave();
+      });
+
+      cancelBtn.addEventListener("click", (ev: MouseEvent) => {
+        ev.stopPropagation();
+        handleCancel();
+      });
+
+      input.addEventListener("keydown", (ev: KeyboardEvent) => {
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          handleSave();
+        } else if (ev.key === "Escape") {
+          ev.preventDefault();
+          handleCancel();
+        }
+      });
+    });
+
+    // Delete table
+    deleteBtn.addEventListener("click", async (e: MouseEvent) => {
+      e.stopPropagation();
+      dropdown.classList.remove("open");
+
+      if (confirm(`Are you sure you want to delete "${table.description}"?`)) {
+        await deleteTable(table, container);
+      }
     });
 
     containerTable.appendChild(item);
