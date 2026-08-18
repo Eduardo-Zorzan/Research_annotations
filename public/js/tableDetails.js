@@ -1,8 +1,10 @@
 let currentTableId = 0;
 let currentTableTitle = "";
 let currentDetails = [];
-let selectedIds = new Set();
 let draggedRowIndex = null;
+let activeRowModal = null;
+let activeReorderBtn = null;
+let isModalGlobalListenerInitialized = false;
 export async function fetchTableDetails(tableId) {
     try {
         const response = await fetch(`/${tableId}/table_details`);
@@ -65,6 +67,31 @@ export async function createTableDetail(tableId, name, link) {
         return null;
     }
 }
+export async function updateTableDetail(detail) {
+    try {
+        const response = await fetch("/table_details", {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                id: detail.id,
+                table_id: detail.table_id,
+                annotation: detail.annotation,
+                name: detail.name,
+                link: detail.link || null,
+            }),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to update item: ${response.statusText}`);
+        }
+        return true;
+    }
+    catch (error) {
+        console.error("Error updating table detail:", error);
+        return false;
+    }
+}
 export async function deleteTableDetailsBatch(ids) {
     try {
         const response = await fetch("/table_details", {
@@ -88,50 +115,66 @@ export async function deleteTableDetailsBatch(ids) {
         return false;
     }
 }
-function updateSelectionToolbar() {
-    const toolbar = document.getElementById("selection-toolbar");
-    const countLabel = document.getElementById("selection-count");
-    const selectAllCheckbox = document.getElementById("select-all-checkbox");
-    if (selectAllCheckbox) {
-        if (currentDetails.length === 0) {
-            selectAllCheckbox.checked = false;
-            selectAllCheckbox.indeterminate = false;
-        }
-        else if (selectedIds.size === currentDetails.length) {
-            selectAllCheckbox.checked = true;
-            selectAllCheckbox.indeterminate = false;
-        }
-        else if (selectedIds.size > 0) {
-            selectAllCheckbox.checked = false;
-            selectAllCheckbox.indeterminate = true;
-        }
-        else {
-            selectAllCheckbox.checked = false;
-            selectAllCheckbox.indeterminate = false;
-        }
+export function closeRowModal() {
+    if (activeRowModal) {
+        activeRowModal.remove();
+        activeRowModal = null;
     }
-    if (toolbar && countLabel) {
-        if (selectedIds.size > 0) {
-            toolbar.style.display = "flex";
-            countLabel.textContent = `${selectedIds.size} selected`;
-        }
-        else {
-            toolbar.style.display = "none";
-        }
+    if (activeReorderBtn) {
+        activeReorderBtn.classList.remove("active");
+        activeReorderBtn.closest(".row_floating_handles")?.classList.remove("active");
+        activeReorderBtn = null;
     }
-    const tbody = document.getElementById("table-details-body");
-    if (tbody) {
-        tbody.querySelectorAll("tr.table_row").forEach((row) => {
-            const rowElement = row;
-            const rowId = Number(rowElement.dataset.rowId);
-            if (selectedIds.has(rowId)) {
-                rowElement.classList.add("selected");
-            }
-            else {
-                rowElement.classList.remove("selected");
-            }
-        });
-    }
+}
+function initModalGlobalListeners() {
+    if (isModalGlobalListenerInitialized)
+        return;
+    isModalGlobalListenerInitialized = true;
+    document.addEventListener("click", (e) => {
+        const target = e.target;
+        if (activeRowModal &&
+            !activeRowModal.contains(target) &&
+            activeReorderBtn &&
+            !activeReorderBtn.contains(target)) {
+            closeRowModal();
+        }
+    });
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+            closeRowModal();
+        }
+    });
+    window.addEventListener("scroll", () => {
+        closeRowModal();
+    }, true);
+}
+function openRowModal(detail, reorderBtn) {
+    closeRowModal();
+    initModalGlobalListeners();
+    const modal = document.createElement("div");
+    modal.className = "row_options_modal";
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "row_modal_action row_modal_action--danger";
+    deleteBtn.setAttribute("aria-label", `Delete ${detail.name}`);
+    deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i> Delete';
+    deleteBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        closeRowModal();
+        const success = await deleteTableDetailsBatch([detail.id]);
+        if (success) {
+            currentDetails = await fetchTableDetails(currentTableId);
+            renderRows();
+        }
+    });
+    modal.appendChild(deleteBtn);
+    document.body.appendChild(modal);
+    const rect = reorderBtn.getBoundingClientRect();
+    modal.style.top = `${rect.bottom + 4}px`;
+    modal.style.left = `${rect.left}px`;
+    reorderBtn.classList.add("active");
+    reorderBtn.closest(".row_floating_handles")?.classList.add("active");
+    activeRowModal = modal;
+    activeReorderBtn = reorderBtn;
 }
 function renderHeader() {
     const thead = document.getElementById("table-details-head") ||
@@ -140,15 +183,6 @@ function renderHeader() {
         return;
     thead.innerHTML = `
     <tr>
-      <th class="col-select">
-        <input
-          type="checkbox"
-          id="select-all-checkbox"
-          class="table_checkbox"
-          title="Select all"
-          aria-label="Select all rows"
-        />
-      </th>
       <th class="col-details">
         <span class="col_header_title">
           <b>Details</b>
@@ -166,28 +200,9 @@ function renderHeader() {
       </th>
     </tr>
   `;
-    const selectAll = document.getElementById("select-all-checkbox");
-    if (selectAll) {
-        selectAll.addEventListener("change", () => {
-            if (selectAll.checked) {
-                currentDetails.forEach((d) => selectedIds.add(d.id));
-            }
-            else {
-                selectedIds.clear();
-            }
-            const tbody = document.getElementById("table-details-body");
-            if (tbody) {
-                tbody
-                    .querySelectorAll(".row_checkbox")
-                    .forEach((cb) => {
-                    cb.checked = selectAll.checked;
-                });
-            }
-            updateSelectionToolbar();
-        });
-    }
 }
 function renderRows() {
+    closeRowModal();
     const tbody = document.getElementById("table-details-body") ||
         document.querySelector(".data-table tbody");
     if (!tbody)
@@ -199,34 +214,26 @@ function renderRows() {
         row.dataset.rowId = String(detail.id);
         row.dataset.rowIndex = String(index);
         row.draggable = true;
-        if (selectedIds.has(detail.id)) {
-            row.classList.add("selected");
-        }
-        const selectCell = document.createElement("td");
-        selectCell.className = "col-select";
-        const dragHandle = document.createElement("i");
-        dragHandle.className = "fa-solid fa-grip-vertical row_drag_handle";
-        dragHandle.title = "Drag to reorder row";
-        const rowCheckbox = document.createElement("input");
-        rowCheckbox.type = "checkbox";
-        rowCheckbox.className = "table_checkbox row_checkbox";
-        rowCheckbox.checked = selectedIds.has(detail.id);
-        rowCheckbox.setAttribute("aria-label", `Select ${detail.name}`);
-        rowCheckbox.addEventListener("change", (e) => {
-            e.stopPropagation();
-            if (rowCheckbox.checked) {
-                selectedIds.add(detail.id);
-            }
-            else {
-                selectedIds.delete(detail.id);
-            }
-            updateSelectionToolbar();
-        });
-        selectCell.appendChild(dragHandle);
-        selectCell.appendChild(rowCheckbox);
-        row.appendChild(selectCell);
         const detailsCell = document.createElement("td");
         detailsCell.className = "col-details";
+        const floatingHandles = document.createElement("div");
+        floatingHandles.className = "row_floating_handles";
+        const reorderBtn = document.createElement("button");
+        reorderBtn.className = "row_reorder_btn";
+        reorderBtn.setAttribute("aria-label", "Row options");
+        reorderBtn.title = "Drag to reorder / Click for options";
+        reorderBtn.innerHTML = '<i class="fa-solid fa-grip-vertical"></i>';
+        reorderBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (activeReorderBtn === reorderBtn) {
+                closeRowModal();
+            }
+            else {
+                openRowModal(detail, reorderBtn);
+            }
+        });
+        floatingHandles.appendChild(reorderBtn);
+        detailsCell.appendChild(floatingHandles);
         const detailsBtn = document.createElement("button");
         detailsBtn.className = "table_details_btn";
         detailsBtn.setAttribute("aria-label", "Details");
@@ -239,28 +246,159 @@ function renderRows() {
         detailsCell.appendChild(detailsBtn);
         row.appendChild(detailsCell);
         const nameCell = document.createElement("td");
-        nameCell.className = "col-name";
-        nameCell.textContent = detail.name;
+        nameCell.className = "col-name col_editable";
+        const nameContainer = document.createElement("div");
+        nameContainer.className = "cell_editable_container";
+        nameContainer.textContent = detail.name;
+        nameCell.appendChild(nameContainer);
+        const startEditName = () => {
+            if (nameCell.classList.contains("editing"))
+                return;
+            nameCell.classList.add("editing");
+            nameContainer.innerHTML = "";
+            const input = document.createElement("input");
+            input.type = "text";
+            input.className = "cell_inline_input";
+            input.value = detail.name;
+            input.setAttribute("aria-label", "Edit item name");
+            nameContainer.appendChild(input);
+            input.focus();
+            input.select();
+            let isSavedOrCancelled = false;
+            const saveName = async () => {
+                if (isSavedOrCancelled)
+                    return;
+                isSavedOrCancelled = true;
+                const newName = input.value.trim();
+                nameCell.classList.remove("editing");
+                if (newName && newName !== detail.name) {
+                    detail.name = newName;
+                    nameContainer.textContent = newName;
+                    await updateTableDetail(detail);
+                }
+                else {
+                    nameContainer.textContent = detail.name;
+                }
+            };
+            const cancelName = () => {
+                if (isSavedOrCancelled)
+                    return;
+                isSavedOrCancelled = true;
+                nameCell.classList.remove("editing");
+                nameContainer.textContent = detail.name;
+            };
+            input.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    saveName();
+                }
+                else if (e.key === "Escape") {
+                    e.preventDefault();
+                    cancelName();
+                }
+            });
+            input.addEventListener("blur", () => {
+                saveName();
+            });
+        };
+        nameCell.addEventListener("click", () => {
+            startEditName();
+        });
         row.appendChild(nameCell);
         const linkCell = document.createElement("td");
-        linkCell.className = "col-link";
-        if (detail.link && detail.link.trim() !== "") {
-            const linkAnchor = document.createElement("a");
-            const href = detail.link.startsWith("http://") || detail.link.startsWith("https://")
-                ? detail.link
-                : `https://${detail.link}`;
-            linkAnchor.href = href;
-            linkAnchor.target = "_blank";
-            linkAnchor.rel = "noopener noreferrer";
-            linkAnchor.className = "table_details_link";
-            linkAnchor.textContent = detail.link;
-            linkCell.appendChild(linkAnchor);
-        }
-        else {
-            linkCell.textContent = "-";
-        }
+        linkCell.className = "col-link col_editable";
+        const linkContainer = document.createElement("div");
+        linkContainer.className = "link_cell_container";
+        const renderLinkDisplay = () => {
+            linkContainer.innerHTML = "";
+            if (detail.link && detail.link.trim() !== "") {
+                const linkAnchor = document.createElement("a");
+                const href = detail.link.startsWith("http://") || detail.link.startsWith("https://")
+                    ? detail.link
+                    : `https://${detail.link}`;
+                linkAnchor.href = href;
+                linkAnchor.target = "_blank";
+                linkAnchor.rel = "noopener noreferrer";
+                linkAnchor.className = "table_details_link";
+                linkAnchor.textContent = detail.link;
+                linkContainer.appendChild(linkAnchor);
+            }
+            else {
+                const emptySpan = document.createElement("span");
+                emptySpan.className = "link_placeholder";
+                emptySpan.textContent = "-";
+                linkContainer.appendChild(emptySpan);
+            }
+        };
+        renderLinkDisplay();
+        linkCell.appendChild(linkContainer);
+        const startEditLink = () => {
+            if (linkCell.classList.contains("editing"))
+                return;
+            linkCell.classList.add("editing");
+            linkContainer.innerHTML = "";
+            const input = document.createElement("input");
+            input.type = "text";
+            input.className = "cell_inline_input";
+            input.placeholder = "https://...";
+            input.value = detail.link || "";
+            input.setAttribute("aria-label", "Edit item link");
+            linkContainer.appendChild(input);
+            input.focus();
+            input.select();
+            let isSavedOrCancelled = false;
+            const saveLink = async () => {
+                if (isSavedOrCancelled)
+                    return;
+                isSavedOrCancelled = true;
+                const newLink = input.value.trim();
+                const updatedLink = newLink || null;
+                linkCell.classList.remove("editing");
+                if (updatedLink !== detail.link) {
+                    detail.link = updatedLink;
+                    renderLinkDisplay();
+                    await updateTableDetail(detail);
+                }
+                else {
+                    renderLinkDisplay();
+                }
+            };
+            const cancelLink = () => {
+                if (isSavedOrCancelled)
+                    return;
+                isSavedOrCancelled = true;
+                linkCell.classList.remove("editing");
+                renderLinkDisplay();
+            };
+            input.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    saveLink();
+                }
+                else if (e.key === "Escape") {
+                    e.preventDefault();
+                    cancelLink();
+                }
+            });
+            input.addEventListener("blur", () => {
+                saveLink();
+            });
+        };
+        linkCell.addEventListener("click", (e) => {
+            const target = e.target;
+            if (target.tagName.toLowerCase() === "a" || target.closest("a")) {
+                return;
+            }
+            startEditLink();
+        });
         row.appendChild(linkCell);
         row.addEventListener("dragstart", (e) => {
+            const target = e.target;
+            if (target.tagName === "INPUT" || row.querySelector(".col_editable.editing")) {
+                e.preventDefault();
+                return;
+            }
+            closeRowModal();
             draggedRowIndex = index;
             row.classList.add("row-dragging");
             if (e.dataTransfer) {
@@ -318,10 +456,6 @@ function renderRows() {
     if (currentTableId > 0) {
         const newRow = document.createElement("tr");
         newRow.className = "table_new_row";
-        const newSelectCell = document.createElement("td");
-        newSelectCell.className = "col-select new_row_plus";
-        newSelectCell.innerHTML = '<i class="fa-solid fa-plus"></i>';
-        newRow.appendChild(newSelectCell);
         const newDetailsCell = document.createElement("td");
         newDetailsCell.className = "col-details new_row_cell";
         const addBtn = document.createElement("button");
@@ -360,7 +494,6 @@ function renderRows() {
             if (created) {
                 currentDetails.push(created);
                 renderRows();
-                updateSelectionToolbar();
                 setTimeout(() => {
                     const freshNameInput = document.querySelector(".table_new_row .input_name");
                     freshNameInput?.focus();
@@ -395,59 +528,22 @@ function renderRows() {
     else if (currentDetails.length === 0) {
         const emptyRow = document.createElement("tr");
         const emptyCell = document.createElement("td");
-        emptyCell.colSpan = 4;
+        emptyCell.colSpan = 3;
         emptyCell.className = "table_details_empty";
         emptyCell.textContent = "No details found for this table.";
         emptyRow.appendChild(emptyCell);
         tbody.appendChild(emptyRow);
     }
-    updateSelectionToolbar();
-}
-function initToolbarListeners() {
-    const deleteBtn = document.getElementById("btn-delete-selected");
-    const clearBtn = document.getElementById("btn-clear-selection");
-    if (deleteBtn) {
-        deleteBtn.onclick = async () => {
-            if (selectedIds.size === 0)
-                return;
-            const count = selectedIds.size;
-            if (confirm(`Are you sure you want to delete ${count} selected item(s)?`)) {
-                const idsToDelete = Array.from(selectedIds);
-                const success = await deleteTableDetailsBatch(idsToDelete);
-                if (success) {
-                    selectedIds.clear();
-                    currentDetails = await fetchTableDetails(currentTableId);
-                    renderRows();
-                    updateSelectionToolbar();
-                }
-            }
-        };
-    }
-    if (clearBtn) {
-        clearBtn.onclick = () => {
-            selectedIds.clear();
-            updateSelectionToolbar();
-            const tbody = document.getElementById("table-details-body");
-            if (tbody) {
-                tbody
-                    .querySelectorAll(".row_checkbox")
-                    .forEach((cb) => {
-                    cb.checked = false;
-                });
-            }
-        };
-    }
 }
 export async function loadTableDetails(tableId, tableTitle) {
+    closeRowModal();
     currentTableId = tableId;
     currentTableTitle = tableTitle;
-    selectedIds.clear();
     const tableTitleEl = document.getElementById("table-title") ||
         document.querySelector(".table-title");
     if (tableTitleEl) {
         tableTitleEl.textContent = tableTitle;
     }
-    initToolbarListeners();
     if (tableId > 0) {
         currentDetails = await fetchTableDetails(tableId);
     }

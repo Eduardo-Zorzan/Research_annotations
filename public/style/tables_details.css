@@ -6,74 +6,11 @@
   min-height: 48px;
 }
 
-.selection_toolbar {
-  position: absolute;
-  bottom: 0;
-  left: 10px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  background: var(--color-sidebar-bg);
-  color: var(--color-sidebar-text);
-  padding: 6px 16px;
-  border-radius: 8px;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.22);
-  z-index: 10;
-  animation: selectionSlideIn 0.2s ease-out;
-}
-
-@keyframes selectionSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.selection_count {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.selection_actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.selection_btn {
-  background: hsla(0, 0%, 100%, 0.12);
-  border: none;
-  color: #fff;
-  font-size: 14px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-.selection_btn:hover {
-  background: hsla(0, 0%, 100%, 0.24);
-}
-
-.selection_btn--danger {
-  color: hsl(0, 85%, 65%);
-}
-
-.selection_btn--danger:hover {
-  background: hsla(0, 80%, 50%, 0.25);
-  color: hsl(0, 95%, 75%);
-}
-
 .table_wrapper {
   overflow-x: auto;
   border-radius: 6px;
+  padding-left: 32px;
+  position: relative;
 }
 
 .data-table {
@@ -103,36 +40,49 @@
   background: transparent;
 }
 
-.data-table th.col-select,
-.data-table td.col-select {
-  width: 58px;
-  max-width: 58px;
-  text-align: center;
-  padding: 8px 6px;
-  white-space: nowrap;
+.row_floating_handles {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -32px;
+  width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: auto;
+  transition: opacity 0.15s ease;
+  z-index: 10;
 }
 
-.row_drag_handle {
-  margin-right: 6px;
-  font-size: 12px;
+.row_floating_handles:hover,
+.data-table tr.table_row:hover .row_floating_handles,
+.data-table tr.table_row .row_floating_handles.active {
+  opacity: 1;
+}
+
+.row_reorder_btn {
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  font-size: 14px;
   color: var(--color-text-secondary);
-  opacity: 0.3;
   cursor: grab;
-  transition: opacity 0.15s ease, color 0.15s ease;
-  vertical-align: middle;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease;
 }
 
-.data-table tr.table_row:hover .row_drag_handle {
-  opacity: 0.9;
-  color: var(--color-text-primary);
+.row_reorder_btn:hover {
+  color: var(--color-accent);
+  background-color: hsla(210, 60%, 55%, 0.15);
 }
 
-.table_checkbox {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--color-accent);
-  cursor: pointer;
-  vertical-align: middle;
+.row_reorder_btn.active {
+  color: var(--color-accent);
+  background-color: hsla(210, 60%, 55%, 0.15);
 }
 
 .col_header_title {
@@ -145,7 +95,8 @@
 
 .data-table th.col-details,
 .data-table td.col-details {
-  width: 80px;
+  position: relative;
+  width: 70px;
   text-align: center;
 }
 
@@ -160,6 +111,103 @@
   word-break: break-all;
 }
 
+.col_editable {
+  cursor: pointer;
+}
+
+.col_editable:hover .cell_editable_container,
+.col_editable:hover .link_placeholder {
+  color: var(--color-accent);
+}
+
+.col_editable.editing {
+  cursor: default;
+}
+
+.cell_editable_container {
+  width: 100%;
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  word-break: break-word;
+}
+
+.link_cell_container {
+  width: 100%;
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  word-break: break-all;
+}
+
+.link_placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.6;
+}
+
+.cell_inline_input {
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--color-accent);
+  border-radius: 4px;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  outline: none;
+  box-shadow: 0 0 0 2px hsla(210, 60%, 55%, 0.15);
+}
+
+.row_options_modal {
+  position: fixed;
+  z-index: 1000;
+  min-width: 130px;
+  background: var(--color-sidebar-bg);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  animation: rowModalIn 0.15s ease-out;
+}
+
+@keyframes rowModalIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.row_modal_action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--color-sidebar-text);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.row_modal_action:hover {
+  background: var(--color-sidebar-btn-hover);
+}
+
+.row_modal_action--danger:hover {
+  background: rgba(220, 60, 60, 0.2);
+  color: #f87171;
+}
+
 .data-table tr.table_row {
   cursor: default;
   transition: background-color 0.15s ease, opacity 0.15s ease;
@@ -167,10 +215,6 @@
 
 .data-table tr.table_row:hover {
   background: hsla(220, 14%, 86%, 0.35);
-}
-
-.data-table tr.table_row.selected {
-  background: hsla(210, 60%, 55%, 0.14) !important;
 }
 
 .data-table tr.table_row.row-dragging {
