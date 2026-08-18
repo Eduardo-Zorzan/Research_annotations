@@ -36,7 +36,7 @@ body.resizing {
 
 .main {
   background: var(--color-main-bg);
-  padding: 20px 20px;
+  padding: 20px 24px;
   overflow-y: auto;
   position: relative;
 }
@@ -45,7 +45,7 @@ body.resizing {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .main_toggle {
@@ -92,34 +92,4 @@ body.resizing {
   font-weight: 700;
   text-align: center;
   color: var(--color-text-primary);
-  margin-bottom: 24px;
-}
-
-.data-table {
-  width: 100%;
-  margin: 0 auto;
-  border-collapse: collapse;
-  border: 2px solid var(--color-text-primary);
-}
-
-.data-table th,
-.data-table td {
-  border: 1px solid var(--color-text-primary);
-  padding: 16px 20px;
-  text-align: left;
-  font-size: 14px;
-}
-
-.data-table th {
-  background: var(--color-table-header-bg);
-  font-weight: 600;
-}
-
-.data-table td {
-  background: transparent;
-}
-
-.data-table th:first-child,
-.data-table td:first-child {
-  width: 60%;
 }

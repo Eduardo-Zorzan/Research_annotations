@@ -37,6 +37,7 @@ pub fn create_default_tables(conn: &Conn) {
                 name TEXT NOT NULL,
                 link TEXT NULL,
                 creation_date TEXT NOT NULL,
+                position INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (table_id)
                     REFERENCES tables(id)
                     ON DELETE CASCADE

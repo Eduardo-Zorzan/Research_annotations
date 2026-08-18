@@ -1,3 +1,4 @@
+import { loadTableDetails } from "./tableDetails.js";
 export function initSidebarToggle(layout, sidebarToggle, mainToggle) {
     let lastSidebarWidth = "";
     function collapseSidebar() {
@@ -80,7 +81,7 @@ export async function updateTable(table, newDescription, container) {
         if (!response.ok) {
             throw new Error(`Failed to update table: ${response.statusText}`);
         }
-        await loadTables(container);
+        await loadTables(container, table.id);
     }
     catch (error) {
         console.error("Error updating table:", error);
@@ -128,18 +129,26 @@ export async function loadTables(container, id_active_table = null) {
     const response = await fetch("/1/tables");
     const tables = await response.json();
     container.innerHTML = "";
-    tables.forEach((table, index) => {
+    if (tables.length === 0) {
+        loadTableDetails(0, "No Tables");
+        return;
+    }
+    let activeTable = tables[0];
+    if (id_active_table !== null && id_active_table !== undefined) {
+        const found = tables.find((t) => t.id == id_active_table);
+        if (found) {
+            activeTable = found;
+        }
+    }
+    loadTableDetails(activeTable.id, activeTable.description);
+    tables.forEach((table) => {
         const containerTable = document.createElement("div");
         containerTable.dataset.tableId = String(table.id);
         const item = document.createElement("div");
         item.className = "sidebar_item";
-        const isActive = () => {
-            if (id_active_table)
-                return id_active_table == table.id;
-            return index == 0;
-        };
-        if (isActive())
+        if (table.id === activeTable.id) {
             item.className += " active";
+        }
         const label = document.createElement("span");
         label.className = "sidebar_item_label";
         label.textContent = table.description;
@@ -153,13 +162,13 @@ export async function loadTables(container, id_active_table = null) {
         renameBtn.className = "sidebar_dropdown_action";
         renameBtn.innerHTML = '<i class="fa-solid fa-pen"></i> Rename';
         const deleteBtn = document.createElement("button");
-        deleteBtn.className = "sidebar_dropdown_action sidebar_dropdown_action--danger";
+        deleteBtn.className =
+            "sidebar_dropdown_action sidebar_dropdown_action--danger";
         deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i> Delete';
         dropdown.appendChild(renameBtn);
         dropdown.appendChild(deleteBtn);
         item.appendChild(label);
         item.appendChild(menuBtn);
-        // Select table on click (when not editing and not clicking menu)
         item.addEventListener("click", (e) => {
             const target = e.target;
             if (item.classList.contains("editing") ||
@@ -171,11 +180,10 @@ export async function loadTables(container, id_active_table = null) {
                 .querySelectorAll(".sidebar_item")
                 .forEach((el) => el.classList.remove("active"));
             item.classList.add("active");
+            loadTableDetails(table.id, table.description);
         });
-        // Toggle dropdown
         menuBtn.addEventListener("click", (e) => {
             e.stopPropagation();
-            // Close other open dropdowns
             container
                 .querySelectorAll(".sidebar_item_dropdown.open")
                 .forEach((d) => {
@@ -185,13 +193,11 @@ export async function loadTables(container, id_active_table = null) {
             if (!dropdown.classList.contains("open")) {
                 const rect = menuBtn.getBoundingClientRect();
                 dropdown.style.top = `${rect.top}px`;
-                // Open to the right of the menu button with a small gap
                 dropdown.style.left = `${rect.right + 8}px`;
                 dropdown.style.right = "auto";
             }
             dropdown.classList.toggle("open");
         });
-        // Rename (switch table card to inline edit mode)
         renameBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             dropdown.classList.remove("open");
@@ -225,14 +231,14 @@ export async function loadTables(container, id_active_table = null) {
                 if (!newDesc)
                     return;
                 if (newDesc === table.description) {
-                    await loadTables(container);
+                    await loadTables(container, table.id);
                     return;
                 }
                 saveBtn.disabled = true;
                 await updateTable(table, newDesc, container);
             };
             const handleCancel = () => {
-                loadTables(container);
+                loadTables(container, table.id);
             };
             saveBtn.addEventListener("click", (ev) => {
                 ev.stopPropagation();
@@ -253,7 +259,6 @@ export async function loadTables(container, id_active_table = null) {
                 }
             });
         });
-        // Delete table
         deleteBtn.addEventListener("click", async (e) => {
             e.stopPropagation();
             dropdown.classList.remove("open");

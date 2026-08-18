@@ -16,9 +16,13 @@
             rel="stylesheet"
         />
 
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+        />
         <link rel="stylesheet" href="/style/variables.css" />
         <link rel="stylesheet" href="/style/sidebar.css" />
+        <link rel="stylesheet" href="/style/tables_details.css" />
         <link rel="stylesheet" href="/style/home.css" />
     </head>
     <body>
@@ -34,10 +38,7 @@
 
                 <div class="sidebar_heading">
                     <h2>Tables</h2>
-                    <button
-                        id="sidebar-add-table"
-                        aria-label="Add table"
-                    >
+                    <button id="sidebar-add-table" aria-label="Add table">
                         <i class="fa-solid fa-plus"></i>
                     </button>
                 </div>
@@ -62,34 +63,44 @@
                     </button>
                 </div>
 
-                <h1 class="table-title">Table Title</h1>
+                <div class="table_header_container">
+                    <h1 id="table-title" class="table-title">Table Title</h1>
 
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th></th>
-                            <th></th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                        </tr>
-                        <tr>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                        </tr>
-                        <tr>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                        </tr>
-                    </tbody>
-                </table>
+                    <div
+                        id="selection-toolbar"
+                        class="selection_toolbar"
+                        style="display: none"
+                    >
+                        <span id="selection-count" class="selection_count"
+                            >0 selected</span
+                        >
+                        <div class="selection_actions">
+                            <button
+                                id="btn-delete-selected"
+                                class="selection_btn selection_btn--danger"
+                                aria-label="Delete selected"
+                                title="Delete selected"
+                            >
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                            <button
+                                id="btn-clear-selection"
+                                class="selection_btn"
+                                aria-label="Deselect all"
+                                title="Deselect all"
+                            >
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table_wrapper">
+                    <table class="data-table">
+                        <thead id="table-details-head"></thead>
+                        <tbody id="table-details-body"></tbody>
+                    </table>
+                </div>
             </main>
         </div>
 

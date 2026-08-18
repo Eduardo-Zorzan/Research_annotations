@@ -1,6 +1,9 @@
+import { loadTableDetails } from "./tableDetails.js";
+
 interface Table {
   id: number;
   description: string;
+  columns_order?: string | null;
 }
 
 export function initSidebarToggle(
@@ -80,7 +83,7 @@ export async function createTable(
       throw new Error(`Failed to create table: ${response.statusText}`);
     }
 
-    const table: Table = await response.json()
+    const table: Table = await response.json();
 
     await loadTables(container, table.id);
   } catch (error) {
@@ -111,7 +114,7 @@ export async function updateTable(
       throw new Error(`Failed to update table: ${response.statusText}`);
     }
 
-    await loadTables(container);
+    await loadTables(container, table.id);
   } catch (error) {
     console.error("Error updating table:", error);
     alert("Failed to update table description. Please try again.");
@@ -149,7 +152,10 @@ export async function deleteTable(
 let isGlobalClickListenerInitialized = false;
 let globalTablesContainer: HTMLElement | null = null;
 
-export async function loadTables(container: HTMLElement, id_active_table: Number | null = null): Promise<void> {
+export async function loadTables(
+  container: HTMLElement,
+  id_active_table: Number | null = null
+): Promise<void> {
   globalTablesContainer = container;
 
   if (!isGlobalClickListenerInitialized) {
@@ -169,22 +175,31 @@ export async function loadTables(container: HTMLElement, id_active_table: Number
 
   container.innerHTML = "";
 
-  tables.forEach((table, index) => {
+  if (tables.length === 0) {
+    loadTableDetails(0, "No Tables");
+    return;
+  }
+
+  let activeTable = tables[0];
+  if (id_active_table !== null && id_active_table !== undefined) {
+    const found = tables.find((t) => t.id == id_active_table);
+    if (found) {
+      activeTable = found;
+    }
+  }
+
+  loadTableDetails(activeTable.id, activeTable.description);
+
+  tables.forEach((table) => {
     const containerTable = document.createElement("div");
     containerTable.dataset.tableId = String(table.id);
 
     const item = document.createElement("div");
     item.className = "sidebar_item";
 
-    const isActive = () => {
-      if (id_active_table)
-        return id_active_table == table.id;
-
-      return index == 0;
-    };
-
-    if (isActive())
+    if (table.id === activeTable.id) {
       item.className += " active";
+    }
 
     const label = document.createElement("span");
     label.className = "sidebar_item_label";
@@ -203,7 +218,8 @@ export async function loadTables(container: HTMLElement, id_active_table: Number
     renameBtn.innerHTML = '<i class="fa-solid fa-pen"></i> Rename';
 
     const deleteBtn = document.createElement("button");
-    deleteBtn.className = "sidebar_dropdown_action sidebar_dropdown_action--danger";
+    deleteBtn.className =
+      "sidebar_dropdown_action sidebar_dropdown_action--danger";
     deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i> Delete';
 
     dropdown.appendChild(renameBtn);
@@ -212,7 +228,6 @@ export async function loadTables(container: HTMLElement, id_active_table: Number
     item.appendChild(label);
     item.appendChild(menuBtn);
 
-    // Select table on click (when not editing and not clicking menu)
     item.addEventListener("click", (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (
@@ -226,12 +241,11 @@ export async function loadTables(container: HTMLElement, id_active_table: Number
         .querySelectorAll(".sidebar_item")
         .forEach((el) => el.classList.remove("active"));
       item.classList.add("active");
+      loadTableDetails(table.id, table.description);
     });
 
-    // Toggle dropdown
     menuBtn.addEventListener("click", (e: MouseEvent) => {
       e.stopPropagation();
-      // Close other open dropdowns
       container
         .querySelectorAll(".sidebar_item_dropdown.open")
         .forEach((d) => {
@@ -241,14 +255,12 @@ export async function loadTables(container: HTMLElement, id_active_table: Number
       if (!dropdown.classList.contains("open")) {
         const rect = menuBtn.getBoundingClientRect();
         dropdown.style.top = `${rect.top}px`;
-        // Open to the right of the menu button with a small gap
         dropdown.style.left = `${rect.right + 8}px`;
         dropdown.style.right = "auto";
       }
       dropdown.classList.toggle("open");
     });
 
-    // Rename (switch table card to inline edit mode)
     renameBtn.addEventListener("click", (e: MouseEvent) => {
       e.stopPropagation();
       dropdown.classList.remove("open");
@@ -290,7 +302,7 @@ export async function loadTables(container: HTMLElement, id_active_table: Number
         const newDesc = input.value.trim();
         if (!newDesc) return;
         if (newDesc === table.description) {
-          await loadTables(container);
+          await loadTables(container, table.id);
           return;
         }
         saveBtn.disabled = true;
@@ -298,7 +310,7 @@ export async function loadTables(container: HTMLElement, id_active_table: Number
       };
 
       const handleCancel = () => {
-        loadTables(container);
+        loadTables(container, table.id);
       };
 
       saveBtn.addEventListener("click", (ev: MouseEvent) => {
@@ -322,7 +334,6 @@ export async function loadTables(container: HTMLElement, id_active_table: Number
       });
     });
 
-    // Delete table
     deleteBtn.addEventListener("click", async (e: MouseEvent) => {
       e.stopPropagation();
       dropdown.classList.remove("open");
