@@ -250,6 +250,14 @@
   transform: scale(1.1);
 }
 
+.table_details_btn.has-annotation {
+  color: var(--color-accent);
+}
+
+.table_details_btn.has-annotation:hover {
+  background-color: hsla(210, 60%, 55%, 0.22);
+}
+
 .table_details_link {
   color: var(--color-accent);
   text-decoration: none;

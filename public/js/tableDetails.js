@@ -1,3 +1,4 @@
+import { openAnnotationModal } from "./annotationModal.js";
 let currentTableId = 0;
 let currentTableTitle = "";
 let currentDetails = [];
@@ -234,14 +235,36 @@ function renderRows() {
         });
         floatingHandles.appendChild(reorderBtn);
         detailsCell.appendChild(floatingHandles);
+        const hasAnnotation = Boolean(detail.annotation && detail.annotation.trim() !== "");
         const detailsBtn = document.createElement("button");
-        detailsBtn.className = "table_details_btn";
-        detailsBtn.setAttribute("aria-label", "Details");
-        detailsBtn.title = "Details";
-        detailsBtn.innerHTML = '<i class="fa-regular fa-pen-to-square"></i>';
+        detailsBtn.className = `table_details_btn ${hasAnnotation ? "has-annotation" : ""}`;
+        detailsBtn.setAttribute("aria-label", "Details & Annotation");
+        detailsBtn.title = hasAnnotation ? "Edit Annotation (Notes present)" : "Add Annotation";
+        detailsBtn.innerHTML = hasAnnotation
+            ? '<i class="fa-solid fa-file-lines"></i>'
+            : '<i class="fa-regular fa-pen-to-square"></i>';
+        const updateBtnAnnotationState = () => {
+            const nowHas = Boolean(detail.annotation && detail.annotation.trim() !== "");
+            if (nowHas) {
+                detailsBtn.classList.add("has-annotation");
+                detailsBtn.title = "Edit Annotation (Notes present)";
+                detailsBtn.innerHTML = '<i class="fa-solid fa-file-lines"></i>';
+            }
+            else {
+                detailsBtn.classList.remove("has-annotation");
+                detailsBtn.title = "Add Annotation";
+                detailsBtn.innerHTML = '<i class="fa-regular fa-pen-to-square"></i>';
+            }
+        };
         detailsBtn.addEventListener("click", (e) => {
             e.stopPropagation();
-            console.log("Detail item clicked:", detail);
+            openAnnotationModal(detail, async (updatedDetail) => {
+                const success = await updateTableDetail(updatedDetail);
+                if (success) {
+                    updateBtnAnnotationState();
+                }
+                return success;
+            });
         });
         detailsCell.appendChild(detailsBtn);
         row.appendChild(detailsCell);
