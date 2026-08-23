@@ -1,4 +1,9 @@
 import { loadTableDetails } from "./tableDetails.js";
+let currentTables = [];
+let currentActiveTableId = 0;
+let draggedTableIndex = null;
+let isGlobalClickListenerInitialized = false;
+let globalTablesContainer = null;
 export function initSidebarToggle(layout, sidebarToggle, mainToggle) {
     let lastSidebarWidth = "";
     function collapseSidebar() {
@@ -40,6 +45,27 @@ export function initSidebarResize(layout, resizeHandle) {
         document.body.classList.remove("resizing");
         resizeHandle.classList.remove("active");
     });
+}
+export async function saveTableOrderToDB(ids) {
+    if (ids.length === 0)
+        return;
+    try {
+        const response = await fetch("/tables/reorder", {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                ids,
+            }),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to reorder tables: ${response.statusText}`);
+        }
+    }
+    catch (error) {
+        console.error("Error saving table order to database:", error);
+    }
 }
 export async function createTable(description, container) {
     try {
@@ -111,41 +137,23 @@ export async function deleteTable(table, container) {
         alert("Failed to delete table. Please try again.");
     }
 }
-let isGlobalClickListenerInitialized = false;
-let globalTablesContainer = null;
-export async function loadTables(container, id_active_table = null) {
-    globalTablesContainer = container;
-    if (!isGlobalClickListenerInitialized) {
-        isGlobalClickListenerInitialized = true;
-        document.addEventListener("click", (e) => {
-            const target = e.target;
-            if (!target.closest(".sidebar_item_menu") && globalTablesContainer) {
-                globalTablesContainer
-                    .querySelectorAll(".sidebar_item_dropdown.open")
-                    .forEach((d) => d.classList.remove("open"));
-            }
-        });
-    }
-    const response = await fetch("/1/tables");
-    const tables = await response.json();
+function renderTables(container) {
     container.innerHTML = "";
-    if (tables.length === 0) {
+    if (currentTables.length === 0) {
         loadTableDetails(0, "No Tables");
         return;
     }
-    let activeTable = tables[0];
-    if (id_active_table !== null && id_active_table !== undefined) {
-        const found = tables.find((t) => t.id == id_active_table);
-        if (found) {
-            activeTable = found;
-        }
-    }
+    let activeTable = currentTables.find((t) => t.id === currentActiveTableId) || currentTables[0];
+    currentActiveTableId = activeTable.id;
     loadTableDetails(activeTable.id, activeTable.description);
-    tables.forEach((table) => {
+    currentTables.forEach((table, index) => {
         const containerTable = document.createElement("div");
+        containerTable.className = "sidebar_item_wrapper";
         containerTable.dataset.tableId = String(table.id);
+        containerTable.dataset.tableIndex = String(index);
         const item = document.createElement("div");
         item.className = "sidebar_item";
+        item.draggable = true;
         if (table.id === activeTable.id) {
             item.className += " active";
         }
@@ -155,6 +163,7 @@ export async function loadTables(container, id_active_table = null) {
         const menuBtn = document.createElement("button");
         menuBtn.className = "sidebar_item_menu";
         menuBtn.setAttribute("aria-label", "Table options");
+        menuBtn.setAttribute("draggable", "false");
         menuBtn.innerHTML = '<i class="fa-solid fa-ellipsis-vertical"></i>';
         const dropdown = document.createElement("div");
         dropdown.className = "sidebar_item_dropdown";
@@ -169,6 +178,70 @@ export async function loadTables(container, id_active_table = null) {
         dropdown.appendChild(deleteBtn);
         item.appendChild(label);
         item.appendChild(menuBtn);
+        item.addEventListener("dragstart", (e) => {
+            const target = e.target;
+            if (item.classList.contains("editing") ||
+                target.tagName === "INPUT" ||
+                target.closest(".sidebar_item_menu") ||
+                target.closest(".sidebar_item_dropdown")) {
+                e.preventDefault();
+                return;
+            }
+            draggedTableIndex = index;
+            item.classList.add("table-dragging");
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", String(table.id));
+            }
+        });
+        item.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            if (draggedTableIndex === null || draggedTableIndex === index)
+                return;
+            const rect = item.getBoundingClientRect();
+            const isBelow = e.clientY > rect.top + rect.height / 2;
+            containerTable.classList.remove("drag-over-top", "drag-over-bottom");
+            if (isBelow) {
+                containerTable.classList.add("drag-over-bottom");
+            }
+            else {
+                containerTable.classList.add("drag-over-top");
+            }
+            if (e.dataTransfer) {
+                e.dataTransfer.dropEffect = "move";
+            }
+        });
+        item.addEventListener("dragleave", () => {
+            containerTable.classList.remove("drag-over-top", "drag-over-bottom");
+        });
+        item.addEventListener("drop", async (e) => {
+            e.preventDefault();
+            const isBelow = containerTable.classList.contains("drag-over-bottom");
+            containerTable.classList.remove("drag-over-top", "drag-over-bottom");
+            if (draggedTableIndex === null || draggedTableIndex === index)
+                return;
+            const [movedTable] = currentTables.splice(draggedTableIndex, 1);
+            let targetPos = index;
+            if (draggedTableIndex < index && !isBelow) {
+                targetPos = index - 1;
+            }
+            else if (draggedTableIndex > index && isBelow) {
+                targetPos = index + 1;
+            }
+            currentTables.splice(targetPos, 0, movedTable);
+            renderTables(container);
+            const orderedIds = currentTables.map((t) => t.id);
+            await saveTableOrderToDB(orderedIds);
+        });
+        item.addEventListener("dragend", () => {
+            draggedTableIndex = null;
+            container
+                .querySelectorAll(".sidebar_item")
+                .forEach((el) => el.classList.remove("table-dragging"));
+            container
+                .querySelectorAll(".sidebar_item_wrapper")
+                .forEach((el) => el.classList.remove("drag-over-top", "drag-over-bottom"));
+        });
         item.addEventListener("click", (e) => {
             const target = e.target;
             if (item.classList.contains("editing") ||
@@ -176,6 +249,7 @@ export async function loadTables(container, id_active_table = null) {
                 target.closest(".sidebar_item_dropdown")) {
                 return;
             }
+            currentActiveTableId = table.id;
             container
                 .querySelectorAll(".sidebar_item")
                 .forEach((el) => el.classList.remove("active"));
@@ -201,6 +275,7 @@ export async function loadTables(container, id_active_table = null) {
         renameBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             dropdown.classList.remove("open");
+            item.draggable = false;
             item.classList.add("editing");
             item.innerHTML = "";
             const input = document.createElement("input");
@@ -270,6 +345,30 @@ export async function loadTables(container, id_active_table = null) {
         containerTable.appendChild(dropdown);
         container.appendChild(containerTable);
     });
+}
+export async function loadTables(container, id_active_table = null) {
+    globalTablesContainer = container;
+    if (!isGlobalClickListenerInitialized) {
+        isGlobalClickListenerInitialized = true;
+        document.addEventListener("click", (e) => {
+            const target = e.target;
+            if (!target.closest(".sidebar_item_menu") && globalTablesContainer) {
+                globalTablesContainer
+                    .querySelectorAll(".sidebar_item_dropdown.open")
+                    .forEach((d) => d.classList.remove("open"));
+            }
+        });
+    }
+    const response = await fetch("/1/tables");
+    currentTables = await response.json();
+    if (id_active_table !== null && id_active_table !== undefined) {
+        currentActiveTableId = Number(id_active_table);
+    }
+    else if (currentTables.length > 0 &&
+        !currentTables.some((t) => t.id === currentActiveTableId)) {
+        currentActiveTableId = currentTables[0].id;
+    }
+    renderTables(container);
 }
 export function createTempTableCard(container) {
     const existingTempInput = container.querySelector(".temp_table_card .sidebar_item_input");

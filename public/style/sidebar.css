@@ -74,6 +74,36 @@
   text-transform: uppercase;
 }
 
+.sidebar_item_wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar_item_wrapper.drag-over-top::before {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--color-accent);
+  border-radius: 2px;
+  z-index: 10;
+}
+
+.sidebar_item_wrapper.drag-over-bottom::after {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--color-accent);
+  border-radius: 2px;
+  z-index: 10;
+}
+
 .sidebar_item {
   position: relative;
   display: flex;
@@ -85,14 +115,28 @@
   border: none;
   border-left: 3px solid transparent;
   border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+  cursor: grab;
+  user-select: none;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease, opacity 0.15s ease;
+}
+
+.sidebar_item:active {
+  cursor: grabbing;
+}
+
+.sidebar_item.table-dragging {
+  opacity: 0.35;
+  background: var(--color-sidebar-btn-hover);
 }
 
 .sidebar_item:hover {
   background: var(--color-sidebar-btn-hover);
   border-left-color: var(--color-accent);
   transform: translateX(2px);
+}
+
+.sidebar_item.table-dragging:hover {
+  transform: none;
 }
 
 .sidebar_item.active {
@@ -105,6 +149,7 @@
   background: var(--color-sidebar-btn-hover);
   border-left-color: var(--color-accent);
   cursor: default;
+  user-select: text;
   transform: none;
 }
 

@@ -24,6 +24,7 @@ pub fn create_default_tables(conn: &Conn) {
                 id INTEGER NOT NULL PRIMARY KEY,
                 description TEXT NOT NULL,
                 user_id INTEGER NOT NULL,
+                position INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (user_id)
                     REFERENCES users(id)
                     ON DELETE NO ACTION

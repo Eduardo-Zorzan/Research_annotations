@@ -15,7 +15,8 @@ use rusqlite::Connection;
 
 use crate::helpers::{
     routes::{
-        GET_HOME, GET_TABLES, GET_TABLE_DETAILS, REORDER_TABLE_DETAILS, TABLES, TABLE_DETAILS,
+        GET_HOME, GET_TABLES, GET_TABLE_DETAILS, REORDER_TABLES, REORDER_TABLE_DETAILS, TABLES,
+        TABLE_DETAILS,
     },
     types::Conn,
 };
@@ -32,6 +33,7 @@ async fn main() {
             TABLES,
             post(tables::post).put(tables::put).delete(tables::delete),
         )
+        .route(REORDER_TABLES, axum::routing::put(tables::reorder))
         .route(GET_TABLE_DETAILS, get(tables_details::get))
         .route(
             TABLE_DETAILS,
