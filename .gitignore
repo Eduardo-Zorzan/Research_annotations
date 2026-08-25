@@ -3,3 +3,4 @@ img
 my_database.db
 node_modules
 PROJECT_GUIDELINES.md
+.env

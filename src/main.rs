@@ -5,7 +5,7 @@ mod helpers;
 use std::sync::{Arc, Mutex};
 
 use database::default;
-use handlers::{assets, home, tables, tables_details};
+use handlers::{assets, home, login, tables, tables_details};
 
 use axum::{
     Router,
@@ -15,8 +15,8 @@ use rusqlite::Connection;
 
 use crate::helpers::{
     routes::{
-        GET_HOME, GET_TABLES, GET_TABLE_DETAILS, REORDER_TABLES, REORDER_TABLE_DETAILS, TABLES,
-        TABLE_DETAILS,
+        GET_HOME, GET_TABLE_DETAILS, GET_TABLES, LOGIN, REORDER_TABLE_DETAILS, REORDER_TABLES,
+        TABLE_DETAILS, TABLES,
     },
     types::Conn,
 };
@@ -41,7 +41,10 @@ async fn main() {
                 .put(tables_details::put)
                 .delete(tables_details::delete),
         )
-        .route(REORDER_TABLE_DETAILS, axum::routing::put(tables_details::reorder))
+        .route(
+            REORDER_TABLE_DETAILS,
+            axum::routing::put(tables_details::reorder),
+        )
         .route(GET_HOME, get(home::get_home))
         .with_state(conn)
         .fallback(assets::static_handler);
