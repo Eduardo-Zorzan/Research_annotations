@@ -1,0 +1,108 @@
+export function initPasswordToggle(
+  passwordInput: HTMLInputElement,
+  toggleBtn: HTMLButtonElement,
+  toggleIcon: HTMLElement
+): void {
+  toggleBtn.addEventListener("click", () => {
+    const isPassword = passwordInput.type === "password";
+    passwordInput.type = isPassword ? "text" : "password";
+    toggleIcon.className = isPassword
+      ? "fa-solid fa-eye-slash"
+      : "fa-solid fa-eye";
+  });
+}
+
+export function initLoginForm(
+  form: HTMLFormElement,
+  usernameInput: HTMLInputElement,
+  passwordInput: HTMLInputElement,
+  errorAlert: HTMLElement,
+  errorText: HTMLElement,
+  submitBtn: HTMLButtonElement
+): void {
+  const showError = (message: string): void => {
+    errorText.textContent = message;
+    errorAlert.classList.add("visible");
+  };
+
+  const hideError = (): void => {
+    errorAlert.classList.remove("visible");
+    errorText.textContent = "";
+    usernameInput.classList.remove("input-error");
+    passwordInput.classList.remove("input-error");
+  };
+
+  [usernameInput, passwordInput].forEach((input) => {
+    input.addEventListener("input", () => {
+      if (errorAlert.classList.contains("visible")) {
+        hideError();
+      }
+    });
+  });
+
+  form.addEventListener("submit", (event: Event) => {
+    event.preventDefault();
+    hideError();
+
+    const username = usernameInput.value.trim();
+    const password = passwordInput.value;
+
+    if (!username && !password) {
+      usernameInput.classList.add("input-error");
+      passwordInput.classList.add("input-error");
+      showError("Please enter your login and password.");
+      usernameInput.focus();
+      return;
+    }
+
+    if (!username) {
+      usernameInput.classList.add("input-error");
+      showError("Please enter your login.");
+      usernameInput.focus();
+      return;
+    }
+
+    if (!password) {
+      passwordInput.classList.add("input-error");
+      showError("Please enter your password.");
+      passwordInput.focus();
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `<span>Signing in...</span><i class="fa-solid fa-circle-notch fa-spin"></i>`;
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const form = document.getElementById("login-form") as HTMLFormElement | null;
+  const usernameInput = document.getElementById("username") as HTMLInputElement | null;
+  const passwordInput = document.getElementById("password") as HTMLInputElement | null;
+  const passwordToggle = document.getElementById("password-toggle") as HTMLButtonElement | null;
+  const passwordToggleIcon = document.getElementById("password-toggle-icon");
+  const errorAlert = document.getElementById("login-error");
+  const errorText = document.getElementById("login-error-text");
+  const submitBtn = document.getElementById("submit-btn") as HTMLButtonElement | null;
+
+  if (passwordInput && passwordToggle && passwordToggleIcon) {
+    initPasswordToggle(passwordInput, passwordToggle, passwordToggleIcon);
+  }
+
+  if (
+    form &&
+    usernameInput &&
+    passwordInput &&
+    errorAlert &&
+    errorText &&
+    submitBtn
+  ) {
+    initLoginForm(
+      form,
+      usernameInput,
+      passwordInput,
+      errorAlert,
+      errorText,
+      submitBtn
+    );
+  }
+});

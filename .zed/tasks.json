@@ -11,4 +11,13 @@
     "hide": "always",
     "allow_concurrent_runs": true
   },
+  {
+    "label": "Create new user",
+    "command": "cargo run --bin new_users",
+    "use_new_terminal": true,
+    "reveal": "always",
+    "reveal_target": "dock",
+    "hide": "never",
+    "allow_concurrent_runs": true,
+  },
 ]
