@@ -5,7 +5,7 @@ mod helpers;
 use std::sync::{Arc, Mutex};
 
 use database::default;
-use handlers::{assets, home, login, tables, tables_details};
+use handlers::{assets, home, tables, tables_details};
 
 use axum::{
     Router,
@@ -15,7 +15,7 @@ use rusqlite::Connection;
 
 use crate::helpers::{
     routes::{
-        GET_HOME, GET_TABLE_DETAILS, GET_TABLES, LOGIN, REORDER_TABLE_DETAILS, REORDER_TABLES,
+        GET_HOME, GET_TABLE_DETAILS, GET_TABLES, REORDER_TABLE_DETAILS, REORDER_TABLES,
         TABLE_DETAILS, TABLES,
     },
     types::Conn,

@@ -1,5 +1,5 @@
 import { openAnnotationModal } from "./annotationModal.js";
-let currentTableId = 0;
+let currentTableId = "";
 let currentTableTitle = "";
 let currentDetails = [];
 let draggedRowIndex = null;
@@ -8,7 +8,7 @@ let activeReorderBtn = null;
 let isModalGlobalListenerInitialized = false;
 export async function fetchTableDetails(tableId) {
     try {
-        const response = await fetch(`/${tableId}/table_details`);
+        const response = await fetch(`/${encodeURIComponent(tableId)}/table_details`);
         if (!response.ok) {
             throw new Error(`Failed to fetch table details: ${response.statusText}`);
         }
@@ -212,7 +212,7 @@ function renderRows() {
     currentDetails.forEach((detail, index) => {
         const row = document.createElement("tr");
         row.className = "table_row";
-        row.dataset.rowId = String(detail.id);
+        row.dataset.rowId = detail.id;
         row.dataset.rowIndex = String(index);
         row.draggable = true;
         const detailsCell = document.createElement("td");
@@ -426,7 +426,7 @@ function renderRows() {
             row.classList.add("row-dragging");
             if (e.dataTransfer) {
                 e.dataTransfer.effectAllowed = "move";
-                e.dataTransfer.setData("text/plain", String(detail.id));
+                e.dataTransfer.setData("text/plain", detail.id);
             }
         });
         row.addEventListener("dragover", (e) => {
@@ -476,7 +476,7 @@ function renderRows() {
         });
         tbody.appendChild(row);
     });
-    if (currentTableId > 0) {
+    if (currentTableId && currentTableId !== "0" && currentTableId !== "") {
         const newRow = document.createElement("tr");
         newRow.className = "table_new_row";
         const newDetailsCell = document.createElement("td");
@@ -567,7 +567,7 @@ export async function loadTableDetails(tableId, tableTitle) {
     if (tableTitleEl) {
         tableTitleEl.textContent = tableTitle;
     }
-    if (tableId > 0) {
+    if (tableId && tableId !== "0" && tableId !== "") {
         currentDetails = await fetchTableDetails(tableId);
     }
     else {

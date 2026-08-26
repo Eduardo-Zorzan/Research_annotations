@@ -1,0 +1,12 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug Project_tables",
+      "program": "target/debug/Project_tables",
+      "cwd": "."
+    }
+  ]
+}

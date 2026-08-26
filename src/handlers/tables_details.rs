@@ -7,12 +7,12 @@ use axum::{
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
-use crate::helpers;
+use crate::helpers::{self, encryption::CryptoService};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TableDetailsReturn {
-    pub id: i32,
-    pub table_id: i32,
+    pub id: String,
+    pub table_id: String,
     pub annotation: Option<String>,
     pub name: String,
     pub link: Option<String>,
@@ -21,8 +21,8 @@ pub struct TableDetailsReturn {
 
 #[derive(Deserialize, Debug)]
 pub struct TableDetails {
-    pub id: Option<i32>,
-    pub table_id: i32,
+    pub id: Option<String>,
+    pub table_id: Option<String>,
     pub annotation: Option<String>,
     pub name: String,
     pub link: Option<String>,
@@ -30,23 +30,33 @@ pub struct TableDetails {
 
 #[derive(Deserialize, Debug)]
 pub struct DeleteTableDetailsPayload {
-    pub id: Option<i32>,
-    pub ids: Option<Vec<i32>>,
+    pub id: Option<String>,
+    pub ids: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct ReorderTableDetailsPayload {
-    pub table_id: i32,
-    pub ids: Vec<i32>,
+    pub table_id: String,
+    pub ids: Vec<String>,
 }
 
 #[axum::debug_handler]
 pub async fn get(
     State(conn): State<helpers::types::Conn>,
-    Path(table_id): Path<i32>,
-) -> Json<Vec<TableDetailsReturn>> {
+    Path(table_id): Path<String>,
+) -> Result<Json<Vec<TableDetailsReturn>>, StatusCode> {
     let Ok(_conn) = conn.lock() else {
-        return Json(vec![]);
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    };
+
+    let crypto_service = match CryptoService::new(helpers::encryption::Keys::Token) {
+        Ok(crypto) => crypto,
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+
+    let table_id_decrypted: String = match crypto_service.decrypt(table_id) {
+        Ok(t_id) => t_id,
+        Err(_) => return Err(StatusCode::FORBIDDEN),
     };
 
     let mut stmt = match _conn.prepare(
@@ -60,26 +70,52 @@ pub async fn get(
         Ok(stmt) => stmt,
         Err(err) => {
             println!("Error on prepare select table_details: {}", err);
-            return Json(vec![]);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
     };
 
-    let details: Vec<TableDetailsReturn> = stmt
-        .query_map(params![table_id], |row| {
-            Ok(TableDetailsReturn {
-                id: row.get(0)?,
-                table_id: row.get(1)?,
-                annotation: row.get(2)?,
-                name: row.get(3)?,
-                link: row.get(4)?,
-                position: row.get(5)?,
-            })
-        })
-        .unwrap()
-        .collect::<Result<_, _>>()
-        .unwrap_or_default();
+    let rows = match stmt.query_map(params![table_id_decrypted], |row| {
+        Ok((
+            row.get::<_, i32>(0)?,
+            row.get::<_, i32>(1)?,
+            row.get::<_, Option<String>>(2)?,
+            row.get::<_, String>(3)?,
+            row.get::<_, Option<String>>(4)?,
+            row.get::<_, Option<i32>>(5)?,
+        ))
+    }) {
+        Ok(rows) => rows,
+        Err(err) => {
+            println!("Error querying table_details: {}", err);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
 
-    Json(details)
+    let mut details = Vec::new();
+    for row in rows {
+        let (id, t_id, annotation, name, link, position) = match row {
+            Ok(data) => data,
+            Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+        };
+        let id_encrypted = match crypto_service.encrypt(id.to_string()) {
+            Ok(enc) => enc,
+            Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+        };
+        let table_id_encrypted = match crypto_service.encrypt(t_id.to_string()) {
+            Ok(enc) => enc,
+            Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+        };
+        details.push(TableDetailsReturn {
+            id: id_encrypted,
+            table_id: table_id_encrypted,
+            annotation,
+            name,
+            link,
+            position,
+        });
+    }
+
+    Ok(Json(details))
 }
 
 #[axum::debug_handler]
@@ -91,10 +127,24 @@ pub async fn post(
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     };
 
+    let crypto_service = match CryptoService::new(helpers::encryption::Keys::Token) {
+        Ok(crypto) => crypto,
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+
+    let Some(table_id_enc) = payload.table_id else {
+        return Err(StatusCode::BAD_REQUEST);
+    };
+
+    let table_id_decrypted: String = match crypto_service.decrypt(table_id_enc) {
+        Ok(t_id) => t_id,
+        Err(_) => return Err(StatusCode::FORBIDDEN),
+    };
+
     let next_position: i32 = _conn
         .query_row(
             "SELECT COALESCE(MAX(position), 0) + 1 FROM table_details WHERE table_id = ?1",
-            params![payload.table_id],
+            params![table_id_decrypted],
             |row| row.get(0),
         )
         .unwrap_or(1);
@@ -106,7 +156,7 @@ pub async fn post(
             RETURNING id, position
         ",
         params![
-            payload.table_id,
+            table_id_decrypted,
             payload.annotation,
             payload.name,
             payload.link,
@@ -114,17 +164,27 @@ pub async fn post(
         ],
         |row| Ok((row.get::<_, i32>(0)?, row.get::<_, i32>(1)?)),
     ) {
-        Ok((id, returned_position)) => Ok((
-            StatusCode::CREATED,
-            Json(TableDetailsReturn {
-                id,
-                table_id: payload.table_id,
-                annotation: payload.annotation,
-                name: payload.name,
-                link: payload.link,
-                position: Some(returned_position),
-            }),
-        )),
+        Ok((id, returned_position)) => {
+            let id_encrypted = match crypto_service.encrypt(id.to_string()) {
+                Ok(enc) => enc,
+                Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+            };
+            let table_id_encrypted = match crypto_service.encrypt(table_id_decrypted) {
+                Ok(enc) => enc,
+                Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+            };
+            Ok((
+                StatusCode::CREATED,
+                Json(TableDetailsReturn {
+                    id: id_encrypted,
+                    table_id: table_id_encrypted,
+                    annotation: payload.annotation,
+                    name: payload.name,
+                    link: payload.link,
+                    position: Some(returned_position),
+                }),
+            ))
+        }
         Err(_err) => {
             println!("Error on insert table_details, error: {}", _err);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
@@ -141,8 +201,18 @@ pub async fn put(
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     };
 
-    let Some(id) = payload.id else {
+    let crypto_service = match CryptoService::new(helpers::encryption::Keys::Token) {
+        Ok(crypto) => crypto,
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+
+    let Some(id_enc) = payload.id else {
         return Err(StatusCode::BAD_REQUEST);
+    };
+
+    let id_decrypted: String = match crypto_service.decrypt(id_enc) {
+        Ok(id) => id,
+        Err(_) => return Err(StatusCode::BAD_REQUEST),
     };
 
     match _conn.execute(
@@ -151,7 +221,7 @@ pub async fn put(
             SET annotation = ?1, name = ?2, link = ?3
             WHERE id = ?4
         ",
-        params![payload.annotation, payload.name, payload.link, id],
+        params![payload.annotation, payload.name, payload.link, id_decrypted],
     ) {
         Ok(0) => Err(StatusCode::NOT_FOUND),
         Ok(_) => Ok(StatusCode::OK),
@@ -171,6 +241,25 @@ pub async fn reorder(
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     };
 
+    let crypto_service = match CryptoService::new(helpers::encryption::Keys::Token) {
+        Ok(crypto) => crypto,
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+
+    let table_id_decrypted: String = match crypto_service.decrypt(payload.table_id) {
+        Ok(t_id) => t_id,
+        Err(_) => return Err(StatusCode::BAD_REQUEST),
+    };
+
+    let mut decrypted_ids = Vec::new();
+    for id_enc in payload.ids {
+        let id_decrypted: String = match crypto_service.decrypt(id_enc) {
+            Ok(id) => id,
+            Err(_) => return Err(StatusCode::BAD_REQUEST),
+        };
+        decrypted_ids.push(id_decrypted);
+    }
+
     let tx = match _conn.transaction() {
         Ok(tx) => tx,
         Err(err) => {
@@ -179,11 +268,11 @@ pub async fn reorder(
         }
     };
 
-    for (index, id) in payload.ids.iter().enumerate() {
+    for (index, id) in decrypted_ids.iter().enumerate() {
         let pos = (index + 1) as i32;
         if let Err(err) = tx.execute(
             "UPDATE table_details SET position = ?1 WHERE id = ?2 AND table_id = ?3",
-            params![pos, id, payload.table_id],
+            params![pos, id, table_id_decrypted],
         ) {
             println!("Error updating position for id {}: {}", id, err);
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
@@ -207,12 +296,27 @@ pub async fn delete(
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     };
 
-    let mut ids_to_delete: Vec<i32> = Vec::new();
-    if let Some(id) = payload.id {
-        ids_to_delete.push(id);
+    let crypto_service = match CryptoService::new(helpers::encryption::Keys::Token) {
+        Ok(crypto) => crypto,
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+
+    let mut ids_to_delete: Vec<String> = Vec::new();
+    if let Some(id_enc) = payload.id {
+        let id_decrypted: String = match crypto_service.decrypt(id_enc) {
+            Ok(id) => id,
+            Err(_) => return Err(StatusCode::BAD_REQUEST),
+        };
+        ids_to_delete.push(id_decrypted);
     }
-    if let Some(ids) = payload.ids {
-        ids_to_delete.extend(ids);
+    if let Some(ids_enc) = payload.ids {
+        for id_enc in ids_enc {
+            let id_decrypted: String = match crypto_service.decrypt(id_enc) {
+                Ok(id) => id,
+                Err(_) => return Err(StatusCode::BAD_REQUEST),
+            };
+            ids_to_delete.push(id_decrypted);
+        }
     }
 
     if ids_to_delete.is_empty() {

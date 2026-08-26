@@ -1,0 +1,10 @@
+{
+  "dap": {
+    "CodeLLDB": {
+      "args": [
+        "--liblldb",
+        "/Library/Developer/CommandLineTools/Library/PrivateFrameworks/LLDB.framework/LLDB"
+      ]
+    }
+  }
+}

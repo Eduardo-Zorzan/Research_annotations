@@ -1,8 +1,10 @@
 [
   {
     "label": "Debug Project_tables",
-    "program": "$ZED_WORKTREE_ROOT/target/debug/Project_tables",
-    "cwd": "$ZED_WORKTREE_ROOT",
+    "adapter": "CodeLLDB",
+    "request": "launch",
+    "program": "target/debug/Project_tables",
+    "cwd": ".",
     "build": {
       "command": "sh",
       "args": [

@@ -1,8 +1,8 @@
 import { openAnnotationModal } from "./annotationModal.js";
 
 export interface TableDetail {
-  id: number;
-  table_id: number;
+  id: string;
+  table_id: string;
   annotation: string | null;
   name: string;
   link: string | null;
@@ -10,7 +10,7 @@ export interface TableDetail {
   position?: number | null;
 }
 
-let currentTableId: number = 0;
+let currentTableId: string = "";
 let currentTableTitle: string = "";
 let currentDetails: TableDetail[] = [];
 let draggedRowIndex: number | null = null;
@@ -19,10 +19,10 @@ let activeReorderBtn: HTMLElement | null = null;
 let isModalGlobalListenerInitialized = false;
 
 export async function fetchTableDetails(
-  tableId: number
+  tableId: string
 ): Promise<TableDetail[]> {
   try {
-    const response = await fetch(`/${tableId}/table_details`);
+    const response = await fetch(`/${encodeURIComponent(tableId)}/table_details`);
     if (!response.ok) {
       throw new Error(`Failed to fetch table details: ${response.statusText}`);
     }
@@ -34,8 +34,8 @@ export async function fetchTableDetails(
 }
 
 export async function saveRowOrderToDB(
-  tableId: number,
-  ids: number[]
+  tableId: string,
+  ids: string[]
 ): Promise<void> {
   if (!tableId || ids.length === 0) return;
   try {
@@ -58,7 +58,7 @@ export async function saveRowOrderToDB(
 }
 
 export async function createTableDetail(
-  tableId: number,
+  tableId: string,
   name: string,
   link: string | null
 ): Promise<TableDetail | null> {
@@ -119,7 +119,7 @@ export async function updateTableDetail(
   }
 }
 
-export async function deleteTableDetailsBatch(ids: number[]): Promise<boolean> {
+export async function deleteTableDetailsBatch(ids: string[]): Promise<boolean> {
   try {
     const response = await fetch("/table_details", {
       method: "DELETE",
@@ -262,7 +262,7 @@ function renderRows(): void {
   currentDetails.forEach((detail, index) => {
     const row = document.createElement("tr");
     row.className = "table_row";
-    row.dataset.rowId = String(detail.id);
+    row.dataset.rowId = detail.id;
     row.dataset.rowIndex = String(index);
     row.draggable = true;
 
@@ -497,7 +497,7 @@ function renderRows(): void {
       row.classList.add("row-dragging");
       if (e.dataTransfer) {
         e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", String(detail.id));
+        e.dataTransfer.setData("text/plain", detail.id);
       }
     });
 
@@ -558,7 +558,7 @@ function renderRows(): void {
     tbody.appendChild(row);
   });
 
-  if (currentTableId > 0) {
+  if (currentTableId && currentTableId !== "0" && currentTableId !== "") {
     const newRow = document.createElement("tr");
     newRow.className = "table_new_row";
 
@@ -651,7 +651,7 @@ function renderRows(): void {
 }
 
 export async function loadTableDetails(
-  tableId: number,
+  tableId: string,
   tableTitle: string
 ): Promise<void> {
   closeRowModal();
@@ -665,7 +665,7 @@ export async function loadTableDetails(
     tableTitleEl.textContent = tableTitle;
   }
 
-  if (tableId > 0) {
+  if (tableId && tableId !== "0" && tableId !== "") {
     currentDetails = await fetchTableDetails(tableId);
   } else {
     currentDetails = [];

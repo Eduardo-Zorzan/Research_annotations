@@ -1,14 +1,15 @@
 import { loadTableDetails } from "./tableDetails.js";
 
 interface Table {
-  id: number;
+  id: string;
   description: string;
   position?: number | null;
   columns_order?: string | null;
 }
 
 let currentTables: Table[] = [];
-let currentActiveTableId: number = 0;
+let currentActiveTableId: string = "";
+let currentUserId: string = localStorage.getItem("user_id") || "";
 let draggedTableIndex: number | null = null;
 let isGlobalClickListenerInitialized = false;
 let globalTablesContainer: HTMLElement | null = null;
@@ -69,7 +70,7 @@ export function initSidebarResize(
   });
 }
 
-export async function saveTableOrderToDB(ids: number[]): Promise<void> {
+export async function saveTableOrderToDB(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   try {
     const response = await fetch("/tables/reorder", {
@@ -100,9 +101,9 @@ export async function createTable(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        id: 0,
+        id: null,
         description,
-        user_id: 1,
+        user_id: currentUserId,
       }),
     });
 
@@ -132,7 +133,7 @@ export async function updateTable(
       body: JSON.stringify({
         id: table.id,
         description: newDescription,
-        user_id: 1,
+        user_id: currentUserId,
       }),
     });
 
@@ -160,7 +161,7 @@ export async function deleteTable(
       body: JSON.stringify({
         id: table.id,
         description: table.description,
-        user_id: 1,
+        user_id: currentUserId,
       }),
     });
 
@@ -179,7 +180,7 @@ function renderTables(container: HTMLElement): void {
   container.innerHTML = "";
 
   if (currentTables.length === 0) {
-    loadTableDetails(0, "No Tables");
+    loadTableDetails("", "No Tables");
     return;
   }
 
@@ -192,7 +193,7 @@ function renderTables(container: HTMLElement): void {
   currentTables.forEach((table, index) => {
     const containerTable = document.createElement("div");
     containerTable.className = "sidebar_item_wrapper";
-    containerTable.dataset.tableId = String(table.id);
+    containerTable.dataset.tableId = table.id;
     containerTable.dataset.tableIndex = String(index);
 
     const item = document.createElement("div");
@@ -246,7 +247,7 @@ function renderTables(container: HTMLElement): void {
       item.classList.add("table-dragging");
       if (e.dataTransfer) {
         e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", String(table.id));
+        e.dataTransfer.setData("text/plain", table.id);
       }
     });
 
@@ -432,9 +433,11 @@ function renderTables(container: HTMLElement): void {
 
 export async function loadTables(
   container: HTMLElement,
-  id_active_table: Number | null = null
+  id_active_table: string | null = null,
+  userId: string = currentUserId
 ): Promise<void> {
   globalTablesContainer = container;
+  currentUserId = userId || localStorage.getItem("user_id") || "";
 
   if (!isGlobalClickListenerInitialized) {
     isGlobalClickListenerInitialized = true;
@@ -448,11 +451,18 @@ export async function loadTables(
     });
   }
 
-  const response = await fetch("/1/tables");
+  if (!currentUserId) {
+    return;
+  }
+
+  const response = await fetch(`/${encodeURIComponent(currentUserId)}/tables`);
+  if (!response.ok) {
+    return;
+  }
   currentTables = await response.json();
 
   if (id_active_table !== null && id_active_table !== undefined) {
-    currentActiveTableId = Number(id_active_table);
+    currentActiveTableId = id_active_table;
   } else if (
     currentTables.length > 0 &&
     !currentTables.some((t) => t.id === currentActiveTableId)

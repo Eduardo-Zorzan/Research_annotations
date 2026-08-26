@@ -1,6 +1,7 @@
 import { loadTableDetails } from "./tableDetails.js";
 let currentTables = [];
-let currentActiveTableId = 0;
+let currentActiveTableId = "";
+let currentUserId = localStorage.getItem("user_id") || "";
 let draggedTableIndex = null;
 let isGlobalClickListenerInitialized = false;
 let globalTablesContainer = null;
@@ -75,9 +76,9 @@ export async function createTable(description, container) {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                id: 0,
+                id: null,
                 description,
-                user_id: 1,
+                user_id: currentUserId,
             }),
         });
         if (!response.ok) {
@@ -101,7 +102,7 @@ export async function updateTable(table, newDescription, container) {
             body: JSON.stringify({
                 id: table.id,
                 description: newDescription,
-                user_id: 1,
+                user_id: currentUserId,
             }),
         });
         if (!response.ok) {
@@ -124,7 +125,7 @@ export async function deleteTable(table, container) {
             body: JSON.stringify({
                 id: table.id,
                 description: table.description,
-                user_id: 1,
+                user_id: currentUserId,
             }),
         });
         if (!response.ok) {
@@ -140,7 +141,7 @@ export async function deleteTable(table, container) {
 function renderTables(container) {
     container.innerHTML = "";
     if (currentTables.length === 0) {
-        loadTableDetails(0, "No Tables");
+        loadTableDetails("", "No Tables");
         return;
     }
     let activeTable = currentTables.find((t) => t.id === currentActiveTableId) || currentTables[0];
@@ -149,7 +150,7 @@ function renderTables(container) {
     currentTables.forEach((table, index) => {
         const containerTable = document.createElement("div");
         containerTable.className = "sidebar_item_wrapper";
-        containerTable.dataset.tableId = String(table.id);
+        containerTable.dataset.tableId = table.id;
         containerTable.dataset.tableIndex = String(index);
         const item = document.createElement("div");
         item.className = "sidebar_item";
@@ -191,7 +192,7 @@ function renderTables(container) {
             item.classList.add("table-dragging");
             if (e.dataTransfer) {
                 e.dataTransfer.effectAllowed = "move";
-                e.dataTransfer.setData("text/plain", String(table.id));
+                e.dataTransfer.setData("text/plain", table.id);
             }
         });
         item.addEventListener("dragover", (e) => {
@@ -346,8 +347,9 @@ function renderTables(container) {
         container.appendChild(containerTable);
     });
 }
-export async function loadTables(container, id_active_table = null) {
+export async function loadTables(container, id_active_table = null, userId = currentUserId) {
     globalTablesContainer = container;
+    currentUserId = userId || localStorage.getItem("user_id") || "";
     if (!isGlobalClickListenerInitialized) {
         isGlobalClickListenerInitialized = true;
         document.addEventListener("click", (e) => {
@@ -359,10 +361,16 @@ export async function loadTables(container, id_active_table = null) {
             }
         });
     }
-    const response = await fetch("/1/tables");
+    if (!currentUserId) {
+        return;
+    }
+    const response = await fetch(`/${encodeURIComponent(currentUserId)}/tables`);
+    if (!response.ok) {
+        return;
+    }
     currentTables = await response.json();
     if (id_active_table !== null && id_active_table !== undefined) {
-        currentActiveTableId = Number(id_active_table);
+        currentActiveTableId = id_active_table;
     }
     else if (currentTables.length > 0 &&
         !currentTables.some((t) => t.id === currentActiveTableId)) {
