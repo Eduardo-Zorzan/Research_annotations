@@ -24,7 +24,7 @@
 }
 
 .sidebar_toggle {
-  align-self: flex-start;
+  align-self: flex-end;
   background: var(--color-accent);
   color: #fff;
   border: none;

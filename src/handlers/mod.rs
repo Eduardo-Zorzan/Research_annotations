@@ -6,4 +6,6 @@ pub mod login;
 pub mod tables;
 pub mod tables_details;
 pub mod tokens;
+pub mod uploads;
+
 

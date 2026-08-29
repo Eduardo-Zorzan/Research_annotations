@@ -5,10 +5,11 @@ mod helpers;
 use std::sync::{Arc, Mutex};
 
 use database::default;
-use handlers::{assets, auth, backup, home, login, tables, tables_details, tokens};
+use handlers::{assets, auth, backup, home, login, tables, tables_details, tokens, uploads};
 
 use axum::{
     Router,
+    extract::DefaultBodyLimit,
     routing::{get, post, put},
 };
 use rusqlite::Connection;
@@ -16,8 +17,8 @@ use rusqlite::Connection;
 use crate::helpers::{
     routes::{
         BACKUP_DOWNLOAD, BACKUP_GENERATE, BACKUP_IMPORT, BACKUP_INFO, GET_HOME, GET_LOGIN,
-        GET_TABLE_DETAILS, GET_TABLES, LOGIN, REORDER_TABLE_DETAILS, REORDER_TABLES, TABLE_DETAILS,
-        TABLES, TOKENS,
+        GET_TABLE_DETAILS, GET_TABLES, LOGIN, REORDER_TABLE_DETAILS, REORDER_TABLES, SERVE_IMAGE,
+        TABLE_DETAILS, TABLES, TOKENS, UPLOAD_IMAGE,
     },
     types::Conn,
 };
@@ -51,14 +52,18 @@ async fn main() {
         .route(BACKUP_DOWNLOAD, get(backup::download))
         .route(BACKUP_IMPORT, post(backup::import))
         .route(TOKENS, post(tokens::create_token))
+        .route(UPLOAD_IMAGE, post(uploads::upload_image))
+        .route(SERVE_IMAGE, get(uploads::serve_image))
         .layer(axum::middleware::from_fn(auth::auth_middleware));
 
     let app = Router::new()
         .merge(protected_routes)
         .route(GET_LOGIN, get(login::get_login))
         .route(LOGIN, post(login::post))
+        .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
         .with_state(conn)
         .fallback(assets::static_handler);
+
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
     axum::serve(listener, app).await.unwrap();

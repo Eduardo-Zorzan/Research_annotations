@@ -12,4 +12,7 @@ pub const BACKUP_GENERATE: &str = "/backup/generate";
 pub const BACKUP_DOWNLOAD: &str = "/backup/download";
 pub const BACKUP_IMPORT: &str = "/backup/import";
 pub const TOKENS: &str = "/tokens";
+pub const UPLOAD_IMAGE: &str = "/upload/image";
+pub const SERVE_IMAGE: &str = "/uploads/{user_id}/{filename}";
+
 

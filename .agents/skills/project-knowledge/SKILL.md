@@ -90,9 +90,10 @@ This skill maintains the cumulative architectural knowledge, guidelines, and des
 - `GET /backup/info`: Returns latest backup timestamp `{ "last_backup": "..." }` for authenticated user.
 - `POST /backup/generate`: Overwrites/saves `./backups/{user_id}/backup.json` and updates SQLite record.
 - `GET /backup/download`: Returns user's stored backup JSON file or 404 with error message if no backup exists on the server.
-- `POST /backup/import`: Wipes/replaces existing tables and details in an SQLite transaction with imported backup payload data for the active user (with frontend confirmation modal before execution).
+- `POST /backup/import`: Wipes/replaces existing tables and details in an SQLite transaction with imported backup payload data, and extracts/restores embedded base64 images to `./uploads/{user_id}/` (with frontend confirmation modal before execution).
 - `POST /tokens`: Creates a new stateless encrypted token for authenticated user.
-
+- `POST /upload/image`: Receives multipart image data, compresses on client, saves to `./uploads/{user_id}/`, and returns `{ "success": 1, "file": { "url": "/uploads/{user_id}/{filename}" } }`.
+- `GET /uploads/:user_id/:filename`: Serves user-uploaded images through `auth_middleware`, validating user ownership (`auth_user.user_id == user_id`) with content type and cache headers.
 
 
 ---
@@ -106,9 +107,10 @@ This skill maintains the cumulative architectural knowledge, guidelines, and des
   - `home.ts`: Layout initialization, sidebar toggle, resize handle, theme loading, config modal binding, and table loading.
   - `sidebar.ts`: Table card creation, inline renaming, deletion, drag-and-drop table reordering.
   - `tableDetails.ts`: Fixed columns (`Details`, `Name`, `Link`), row drag-and-drop reordering, inline cell editing, 3-dots row options.
-  - `annotationModal.ts`: Resizable & maximizable rich text modal for notes using Editor.js.
+  - `annotationModal.ts`: Resizable & maximizable rich text modal for notes using Editor.js, client-side canvas image downscaling/compression to WebP, and asynchronous image uploading.
   - `blockEditor.ts`: Slash command / block editor module.
-  - `configModal.ts`: Settings/Configuration modal handling theme selection, backup operations (info, generate, download, import), token generation & copying, and user logout.
+  - `configModal.ts`: Settings/Configuration modal handling theme selection, backup operations (info, generate, download, import with replacement confirmation dialog), token generation & copying, and user logout.
+
 
 ---
 

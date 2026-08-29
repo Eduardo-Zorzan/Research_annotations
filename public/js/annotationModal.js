@@ -294,19 +294,30 @@ function buildEditorJSTools() {
             class: imageTool,
             config: {
                 uploader: {
-                    uploadByFile(file) {
-                        return new Promise((resolve) => {
-                            const reader = new FileReader();
-                            reader.readAsDataURL(file);
-                            reader.onload = () => {
-                                resolve({
-                                    success: 1,
-                                    file: {
-                                        url: reader.result,
-                                    },
-                                });
+                    async uploadByFile(file) {
+                        try {
+                            const compressedBlob = await compressImageFile(file);
+                            const formData = new FormData();
+                            const filename = file.name ? file.name.replace(/\.[^/.]+$/, "") + ".webp" : "image.webp";
+                            formData.append("image", compressedBlob, filename);
+                            const res = await fetch("/upload/image", {
+                                method: "POST",
+                                body: formData,
+                            });
+                            if (!res.ok) {
+                                return { success: 0 };
+                            }
+                            const data = await res.json();
+                            return {
+                                success: 1,
+                                file: {
+                                    url: data.file.url,
+                                },
                             };
-                        });
+                        }
+                        catch (_) {
+                            return { success: 0 };
+                        }
                     },
                     uploadByUrl(url) {
                         return Promise.resolve({
@@ -321,6 +332,54 @@ function buildEditorJSTools() {
         };
     }
     return tools;
+}
+function compressImageFile(file) {
+    return new Promise((resolve) => {
+        if (file.type === "image/svg+xml" || file.type === "image/gif") {
+            resolve(file);
+            return;
+        }
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            const maxDimension = 1920;
+            let width = img.width;
+            let height = img.height;
+            if (width > maxDimension || height > maxDimension) {
+                if (width > height) {
+                    height = Math.round((height * maxDimension) / width);
+                    width = maxDimension;
+                }
+                else {
+                    width = Math.round((width * maxDimension) / height);
+                    height = maxDimension;
+                }
+            }
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) {
+                resolve(file);
+                return;
+            }
+            ctx.drawImage(img, 0, 0, width, height);
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    resolve(blob);
+                }
+                else {
+                    resolve(file);
+                }
+            }, "image/webp", 0.85);
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            resolve(file);
+        };
+        img.src = url;
+    });
 }
 function createModalDOM() {
     if (modalBackdrop)

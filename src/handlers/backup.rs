@@ -6,6 +6,7 @@ use axum::{
     http::{HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
+use base64::Engine;
 use chrono::Utc;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
@@ -30,10 +31,18 @@ pub struct BackupTable {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct BackupImage {
+    pub filename: String,
+    pub data: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct BackupPayload {
     pub version: Option<String>,
     pub export_date: Option<String>,
     pub tables: Vec<BackupTable>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub images: Option<Vec<BackupImage>>,
 }
 
 #[derive(Serialize)]
@@ -99,11 +108,35 @@ pub fn perform_backup_for_user(
         });
     }
 
+    let uploads_dir = format!("uploads/{}", user_id);
+    let mut backup_images: Vec<BackupImage> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&uploads_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(filename) = path.file_name().and_then(|f| f.to_str()) {
+                    if let Ok(bytes) = std::fs::read(&path) {
+                        let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                        backup_images.push(BackupImage {
+                            filename: filename.to_string(),
+                            data: encoded,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
     let created_at = Utc::now().to_rfc3339();
     let payload = BackupPayload {
         version: Some("1.0".to_string()),
         export_date: Some(created_at.clone()),
         tables: backup_tables,
+        images: if backup_images.is_empty() {
+            None
+        } else {
+            Some(backup_images)
+        },
     };
 
     let json_bytes = serde_json::to_vec_pretty(&payload)?;
@@ -275,7 +308,6 @@ pub async fn import(
         "DELETE FROM table_details WHERE table_id IN (SELECT id FROM tables WHERE user_id = ?1)",
         params![auth_user.user_id],
     ) {
-
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 
@@ -296,7 +328,6 @@ pub async fn import(
         ) {
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
-
 
         let table_id = tx.last_insert_rowid();
         tables_count += 1;
@@ -329,6 +360,24 @@ pub async fn import(
 
     if let Err(_) = tx.commit() {
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    let uploads_dir = format!("uploads/{}", auth_user.user_id);
+    let _ = std::fs::remove_dir_all(&uploads_dir);
+
+    if let Some(images) = &payload.images {
+        if !images.is_empty() {
+            let _ = std::fs::create_dir_all(&uploads_dir);
+            for img in images {
+                if img.filename.contains('/') || img.filename.contains('\\') || img.filename.contains("..") {
+                    continue;
+                }
+                if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(&img.data) {
+                    let img_path = format!("{}/{}", uploads_dir, img.filename);
+                    let _ = std::fs::write(&img_path, &decoded);
+                }
+            }
+        }
     }
 
     let _ = perform_backup_for_user(&_conn, auth_user.user_id);
