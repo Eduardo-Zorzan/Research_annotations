@@ -23,6 +23,10 @@ export async function fetchTableDetails(
 ): Promise<TableDetail[]> {
   try {
     const response = await fetch(`/${encodeURIComponent(tableId)}/table_details`);
+    if (response.status === 401 || response.status === 403) {
+      window.location.href = "/";
+      return [];
+    }
     if (!response.ok) {
       throw new Error(`Failed to fetch table details: ${response.statusText}`);
     }
@@ -49,6 +53,10 @@ export async function saveRowOrderToDB(
         ids,
       }),
     });
+    if (response.status === 401 || response.status === 403) {
+      window.location.href = "/";
+      return;
+    }
     if (!response.ok) {
       throw new Error(`Failed to reorder rows: ${response.statusText}`);
     }
@@ -77,6 +85,11 @@ export async function createTableDetail(
         creation_date: null,
       }),
     });
+
+    if (response.status === 401 || response.status === 403) {
+      window.location.href = "/";
+      return null;
+    }
 
     if (!response.ok) {
       throw new Error(`Failed to create table detail: ${response.statusText}`);
@@ -108,6 +121,11 @@ export async function updateTableDetail(
       }),
     });
 
+    if (response.status === 401 || response.status === 403) {
+      window.location.href = "/";
+      return false;
+    }
+
     if (!response.ok) {
       throw new Error(`Failed to update item: ${response.statusText}`);
     }
@@ -131,6 +149,11 @@ export async function deleteTableDetailsBatch(ids: string[]): Promise<boolean> {
         ids,
       }),
     });
+
+    if (response.status === 401 || response.status === 403) {
+      window.location.href = "/";
+      return false;
+    }
 
     if (!response.ok) {
       throw new Error(`Failed to delete items: ${response.statusText}`);

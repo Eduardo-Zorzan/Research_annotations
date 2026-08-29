@@ -1,7 +1,6 @@
 import { loadTableDetails } from "./tableDetails.js";
 let currentTables = [];
 let currentActiveTableId = "";
-let currentUserId = localStorage.getItem("user_id") || "";
 let draggedTableIndex = null;
 let isGlobalClickListenerInitialized = false;
 let globalTablesContainer = null;
@@ -60,6 +59,10 @@ export async function saveTableOrderToDB(ids) {
                 ids,
             }),
         });
+        if (response.status === 401 || response.status === 403) {
+            window.location.href = "/";
+            return;
+        }
         if (!response.ok) {
             throw new Error(`Failed to reorder tables: ${response.statusText}`);
         }
@@ -78,9 +81,12 @@ export async function createTable(description, container) {
             body: JSON.stringify({
                 id: null,
                 description,
-                user_id: currentUserId,
             }),
         });
+        if (response.status === 401 || response.status === 403) {
+            window.location.href = "/";
+            return;
+        }
         if (!response.ok) {
             throw new Error(`Failed to create table: ${response.statusText}`);
         }
@@ -102,9 +108,12 @@ export async function updateTable(table, newDescription, container) {
             body: JSON.stringify({
                 id: table.id,
                 description: newDescription,
-                user_id: currentUserId,
             }),
         });
+        if (response.status === 401 || response.status === 403) {
+            window.location.href = "/";
+            return;
+        }
         if (!response.ok) {
             throw new Error(`Failed to update table: ${response.statusText}`);
         }
@@ -125,9 +134,12 @@ export async function deleteTable(table, container) {
             body: JSON.stringify({
                 id: table.id,
                 description: table.description,
-                user_id: currentUserId,
             }),
         });
+        if (response.status === 401 || response.status === 403) {
+            window.location.href = "/";
+            return;
+        }
         if (!response.ok) {
             throw new Error(`Failed to delete table: ${response.statusText}`);
         }
@@ -347,9 +359,8 @@ function renderTables(container) {
         container.appendChild(containerTable);
     });
 }
-export async function loadTables(container, id_active_table = null, userId = currentUserId) {
+export async function loadTables(container, id_active_table = null) {
     globalTablesContainer = container;
-    currentUserId = userId || localStorage.getItem("user_id") || "";
     if (!isGlobalClickListenerInitialized) {
         isGlobalClickListenerInitialized = true;
         document.addEventListener("click", (e) => {
@@ -361,10 +372,11 @@ export async function loadTables(container, id_active_table = null, userId = cur
             }
         });
     }
-    if (!currentUserId) {
+    const response = await fetch("/tables");
+    if (response.status === 401 || response.status === 403) {
+        window.location.href = "/";
         return;
     }
-    const response = await fetch(`/${encodeURIComponent(currentUserId)}/tables`);
     if (!response.ok) {
         return;
     }

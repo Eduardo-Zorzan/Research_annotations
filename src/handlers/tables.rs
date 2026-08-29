@@ -1,12 +1,13 @@
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Extension, State},
     http::StatusCode,
 };
 
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
+use crate::handlers::auth::AuthUser;
 use crate::helpers::{self, encryption::CryptoService};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -20,7 +21,6 @@ pub struct TableReturn {
 pub struct Table {
     pub id: Option<String>,
     pub description: String,
-    pub user_id: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -31,7 +31,7 @@ pub struct ReorderTablesPayload {
 #[axum::debug_handler]
 pub async fn get(
     State(conn): State<helpers::types::Conn>,
-    Path(user_id): Path<String>,
+    Extension(auth_user): Extension<AuthUser>,
 ) -> Result<Json<Vec<TableReturn>>, StatusCode> {
     let Ok(_conn) = conn.lock() else {
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
@@ -40,11 +40,6 @@ pub async fn get(
     let crypto_service = match CryptoService::new(helpers::encryption::Keys::Token) {
         Ok(crypto) => crypto,
         Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-    };
-
-    let user_id_decrypted: String = match crypto_service.decrypt(user_id) {
-        Ok(user_id) => user_id,
-        Err(_) => return Err(StatusCode::FORBIDDEN),
     };
 
     let mut stmt = match _conn.prepare(
@@ -62,7 +57,7 @@ pub async fn get(
         }
     };
 
-    let rows = match stmt.query_map(params![user_id_decrypted], |row| {
+    let rows = match stmt.query_map(params![auth_user.user_id], |row| {
         Ok((
             row.get::<_, i32>(0)?,
             row.get::<_, String>(1)?,
@@ -99,6 +94,7 @@ pub async fn get(
 #[axum::debug_handler]
 pub async fn post(
     State(conn): State<helpers::types::Conn>,
+    Extension(auth_user): Extension<AuthUser>,
     Json(payload): Json<Table>,
 ) -> Result<(StatusCode, Json<TableReturn>), StatusCode> {
     let Ok(_conn) = conn.lock() else {
@@ -110,19 +106,10 @@ pub async fn post(
         Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
     };
 
-    let Some(user_id_enc) = payload.user_id else {
-        return Err(StatusCode::BAD_REQUEST);
-    };
-
-    let user_id_decrypted: String = match crypto_service.decrypt(user_id_enc) {
-        Ok(user_id) => user_id,
-        Err(_) => return Err(StatusCode::FORBIDDEN),
-    };
-
     let next_position: i32 = _conn
         .query_row(
             "SELECT COALESCE(MAX(position), 0) + 1 FROM tables WHERE user_id = ?1",
-            params![user_id_decrypted],
+            params![auth_user.user_id],
             |row| row.get(0),
         )
         .unwrap_or(1);
@@ -133,7 +120,7 @@ pub async fn post(
             VALUES (?1, ?2, ?3)
             RETURNING id, position
         ",
-        params![payload.description, user_id_decrypted, next_position],
+        params![payload.description, auth_user.user_id, next_position],
         |row| Ok((row.get::<_, i32>(0)?, row.get::<_, i32>(1)?)),
     ) {
         Ok((id, pos)) => {

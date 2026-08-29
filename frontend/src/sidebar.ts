@@ -9,7 +9,6 @@ interface Table {
 
 let currentTables: Table[] = [];
 let currentActiveTableId: string = "";
-let currentUserId: string = localStorage.getItem("user_id") || "";
 let draggedTableIndex: number | null = null;
 let isGlobalClickListenerInitialized = false;
 let globalTablesContainer: HTMLElement | null = null;
@@ -82,6 +81,10 @@ export async function saveTableOrderToDB(ids: string[]): Promise<void> {
         ids,
       }),
     });
+    if (response.status === 401 || response.status === 403) {
+      window.location.href = "/";
+      return;
+    }
     if (!response.ok) {
       throw new Error(`Failed to reorder tables: ${response.statusText}`);
     }
@@ -103,9 +106,13 @@ export async function createTable(
       body: JSON.stringify({
         id: null,
         description,
-        user_id: currentUserId,
       }),
     });
+
+    if (response.status === 401 || response.status === 403) {
+      window.location.href = "/";
+      return;
+    }
 
     if (!response.ok) {
       throw new Error(`Failed to create table: ${response.statusText}`);
@@ -133,9 +140,13 @@ export async function updateTable(
       body: JSON.stringify({
         id: table.id,
         description: newDescription,
-        user_id: currentUserId,
       }),
     });
+
+    if (response.status === 401 || response.status === 403) {
+      window.location.href = "/";
+      return;
+    }
 
     if (!response.ok) {
       throw new Error(`Failed to update table: ${response.statusText}`);
@@ -161,9 +172,13 @@ export async function deleteTable(
       body: JSON.stringify({
         id: table.id,
         description: table.description,
-        user_id: currentUserId,
       }),
     });
+
+    if (response.status === 401 || response.status === 403) {
+      window.location.href = "/";
+      return;
+    }
 
     if (!response.ok) {
       throw new Error(`Failed to delete table: ${response.statusText}`);
@@ -433,11 +448,9 @@ function renderTables(container: HTMLElement): void {
 
 export async function loadTables(
   container: HTMLElement,
-  id_active_table: string | null = null,
-  userId: string = currentUserId
+  id_active_table: string | null = null
 ): Promise<void> {
   globalTablesContainer = container;
-  currentUserId = userId || localStorage.getItem("user_id") || "";
 
   if (!isGlobalClickListenerInitialized) {
     isGlobalClickListenerInitialized = true;
@@ -451,11 +464,11 @@ export async function loadTables(
     });
   }
 
-  if (!currentUserId) {
+  const response = await fetch("/tables");
+  if (response.status === 401 || response.status === 403) {
+    window.location.href = "/";
     return;
   }
-
-  const response = await fetch(`/${encodeURIComponent(currentUserId)}/tables`);
   if (!response.ok) {
     return;
   }

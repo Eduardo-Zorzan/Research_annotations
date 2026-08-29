@@ -1,3 +1,4 @@
+import { setCookie } from "./cookies.js";
 export function initPasswordToggle(passwordInput, toggleBtn, toggleIcon) {
     toggleBtn.addEventListener("click", () => {
         const isPassword = passwordInput.type === "password";
@@ -51,6 +52,46 @@ export function initLoginForm(form, usernameInput, passwordInput, errorAlert, er
         }
         submitBtn.disabled = true;
         submitBtn.innerHTML = `<span>Signing in...</span><i class="fa-solid fa-circle-notch fa-spin"></i>`;
+        (async () => {
+            try {
+                const response = await fetch("/login", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        username,
+                        password,
+                    }),
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setCookie("token", data.token, {
+                        days: 14,
+                        path: "/",
+                        sameSite: "Lax",
+                        secure: window.location.protocol === "https:",
+                    });
+                    window.location.href = "/home";
+                    return;
+                }
+                if (response.status === 401) {
+                    showError("Invalid login or password.");
+                    usernameInput.classList.add("input-error");
+                    passwordInput.classList.add("input-error");
+                }
+                else {
+                    showError("An error occurred during sign in. Please try again.");
+                }
+            }
+            catch (error) {
+                showError("An error occurred during sign in. Please try again.");
+            }
+            finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = `<span>Sign In</span><i class="fa-solid fa-arrow-right-to-bracket"></i>`;
+            }
+        })();
     });
 }
 document.addEventListener("DOMContentLoaded", () => {

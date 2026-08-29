@@ -4,11 +4,11 @@
 [
   {
     "label": "Run",
-    "command": "kill -9 $(lsof -t -i:3000) & npx tsc & cargo run ", //"args": [],
+    "command": "(kill -9 $(lsof -t -i:3000) 2>/dev/null || true); npx tsc && cargo run",
     "use_new_terminal": false,
     "reveal": "never",
     "reveal_target": "dock",
-    "hide": "always",
+    "hide": "never",
     "allow_concurrent_runs": true
   },
   {

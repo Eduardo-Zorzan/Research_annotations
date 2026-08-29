@@ -1,4 +1,3 @@
-use axum::http::StatusCode;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +9,7 @@ pub struct Token {
     pub user_id: i64,
 }
 
-fn generate_token(user_id: i64) -> Result<String, Box<dyn std::error::Error>> {
+pub fn generate_token(user_id: i64) -> Result<String, Box<dyn std::error::Error>> {
     let token = Token {
         expired_at: Utc::now() + Duration::weeks(2),
         user_id: user_id,
@@ -28,19 +27,16 @@ fn generate_token(user_id: i64) -> Result<String, Box<dyn std::error::Error>> {
     };
 }
 
-fn verify_token(token_encrypted: String, user_id: i64) -> StatusCode {
+pub fn verify_token(token_encrypted: String) -> Result<i64, Box<dyn std::error::Error>> {
     let crypto_service = match CryptoService::new(super::encryption::Keys::Token) {
         Ok(it) => it,
-        Err(err) => {
-            print!("Error on initialize CryptoService: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR;
-        }
+        Err(err) => return Err(err),
     };
     let decrypted_token = match crypto_service.decrypt(token_encrypted) {
         Ok(it) => it,
         Err(err) => {
             print!("Error on decrypting token: {}", err);
-            return StatusCode::FORBIDDEN;
+            return Err(err);
         }
     };
 
@@ -48,13 +44,13 @@ fn verify_token(token_encrypted: String, user_id: i64) -> StatusCode {
         Ok(it) => it,
         Err(err) => {
             print!("Error on deserializing token: {}", err);
-            return StatusCode::FORBIDDEN;
+            return Err(err.into());
         }
     };
 
-    if token.user_id != user_id || token.expired_at < Utc::now() {
-        return StatusCode::FORBIDDEN;
+    if token.expired_at < Utc::now() {
+        return Err("Token Expired.".into());
     };
 
-    return StatusCode::OK;
+    Ok(token.user_id)
 }
