@@ -505,7 +505,7 @@ function renderRows() {
         addBtn.className = "new_row_add_btn";
         addBtn.title = "Save item";
         addBtn.setAttribute("aria-label", "Save item");
-        addBtn.innerHTML = '<i style="font-size:18px" class="fa-regular fa-floppy-disk"></i>';
+        addBtn.innerHTML = '<i class="fa-regular fa-floppy-disk"></i>';
         newDetailsCell.appendChild(addBtn);
         newRow.appendChild(newDetailsCell);
         const newNameCell = document.createElement("td");

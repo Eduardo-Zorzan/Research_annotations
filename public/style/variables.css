@@ -1,4 +1,6 @@
-:root {
+:root,
+html[data-theme="light"],
+body[data-theme="light"] {
   --color-sidebar-bg: hsl(220, 18%, 22%);
   --color-sidebar-text: hsl(0, 0%, 95%);
   --color-sidebar-btn-bg: hsl(220, 14%, 38%);
@@ -9,6 +11,9 @@
 
   --color-main-bg: hsl(220, 14%, 92%);
 
+  --color-card-bg: hsl(0, 0%, 100%);
+  --color-card-border: hsl(220, 10%, 82%);
+
   --color-table-border: hsl(220, 10%, 75%);
   --color-table-header-bg: hsl(220, 14%, 86%);
 
@@ -16,4 +21,63 @@
   --color-text-secondary: hsl(220, 10%, 45%);
 
   --color-settings-icon: hsl(220, 10%, 45%);
+
+  --color-modal-bg: hsl(0, 0%, 100%);
+  --color-modal-header-bg: hsl(220, 18%, 22%);
+  --color-modal-header-text: hsl(0, 0%, 95%);
+  --color-modal-section-bg: hsl(220, 14%, 96%);
+  --color-modal-border: hsl(220, 10%, 85%);
+
+  --color-btn-secondary-bg: hsl(220, 14%, 85%);
+  --color-btn-secondary-hover: hsl(220, 14%, 78%);
+  --color-btn-secondary-text: hsl(220, 18%, 20%);
+
+  --color-btn-danger-bg: hsl(0, 72%, 51%);
+  --color-btn-danger-hover: hsl(0, 72%, 44%);
+  --color-btn-danger-text: #ffffff;
+
+  --color-token-bg: hsl(220, 14%, 93%);
+  --color-token-border: hsl(220, 10%, 80%);
+}
+
+:root[data-theme="dark"],
+html[data-theme="dark"],
+body[data-theme="dark"] {
+  --color-sidebar-bg: hsl(220, 20%, 13%);
+  --color-sidebar-text: hsl(0, 0%, 95%);
+  --color-sidebar-btn-bg: hsl(220, 16%, 22%);
+  --color-sidebar-btn-hover: hsl(220, 16%, 30%);
+
+  --color-accent: hsl(210, 65%, 55%);
+  --color-accent-hover: hsl(210, 65%, 45%);
+
+  --color-main-bg: hsl(220, 18%, 14%);
+
+  --color-card-bg: hsl(220, 18%, 18%);
+  --color-card-border: hsl(220, 14%, 26%);
+
+  --color-table-border: hsl(220, 14%, 24%);
+  --color-table-header-bg: hsl(220, 18%, 20%);
+
+  --color-text-primary: hsl(220, 14%, 92%);
+  --color-text-secondary: hsl(220, 10%, 65%);
+
+  --color-settings-icon: hsl(220, 10%, 65%);
+
+  --color-modal-bg: hsl(220, 18%, 18%);
+  --color-modal-header-bg: hsl(220, 20%, 13%);
+  --color-modal-header-text: hsl(0, 0%, 95%);
+  --color-modal-section-bg: hsl(220, 18%, 15%);
+  --color-modal-border: hsl(220, 14%, 26%);
+
+  --color-btn-secondary-bg: hsl(220, 16%, 26%);
+  --color-btn-secondary-hover: hsl(220, 16%, 34%);
+  --color-btn-secondary-text: hsl(0, 0%, 95%);
+
+  --color-btn-danger-bg: hsl(0, 72%, 51%);
+  --color-btn-danger-hover: hsl(0, 72%, 44%);
+  --color-btn-danger-text: #ffffff;
+
+  --color-token-bg: hsl(220, 18%, 13%);
+  --color-token-border: hsl(220, 14%, 26%);
 }

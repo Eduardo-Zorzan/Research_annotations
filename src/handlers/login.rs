@@ -4,6 +4,7 @@ use axum::{
     http::StatusCode,
     response::{Html, IntoResponse},
 };
+use chrono::{Duration, Utc};
 use rust_embed::Embed;
 use serde::{Deserialize, Serialize};
 
@@ -70,10 +71,11 @@ pub async fn post(
         return Err(StatusCode::UNAUTHORIZED);
     }
 
-    let generated_token = match token::generate_token(user_record.0) {
-        Ok(crypto) => crypto,
-        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-    };
+    let generated_token =
+        match token::generate_token(user_record.0, Utc::now() + Duration::weeks(4)) {
+            Ok(crypto) => crypto,
+            Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+        };
 
     Ok((
         StatusCode::OK,

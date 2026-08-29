@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::helpers::encryption::CryptoService;
@@ -9,9 +9,12 @@ pub struct Token {
     pub user_id: i64,
 }
 
-pub fn generate_token(user_id: i64) -> Result<String, Box<dyn std::error::Error>> {
+pub fn generate_token(
+    user_id: i64,
+    expiration_date: DateTime<Utc>,
+) -> Result<String, Box<dyn std::error::Error>> {
     let token = Token {
-        expired_at: Utc::now() + Duration::weeks(2),
+        expired_at: expiration_date,
         user_id: user_id,
     };
 

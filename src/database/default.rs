@@ -9,17 +9,6 @@ pub fn create_default_tables(conn: &Conn) {
                 password TEXT NOT NULL
             );
 
-        CREATE TABLE IF NOT EXISTS tokens (
-                id INTEGER NOT NULL PRIMARY KEY,
-                token TEXT NOT NULL,
-                user_id INTEGER NOT NULL,
-                expiration_date TEXT NOT NULL,
-                FOREIGN KEY (user_id)
-                    REFERENCES users(id)
-                    ON DELETE CASCADE
-                    ON UPDATE NO ACTION
-            );
-
         CREATE TABLE IF NOT EXISTS tables (
                 id INTEGER NOT NULL PRIMARY KEY,
                 description TEXT NOT NULL,
@@ -44,9 +33,22 @@ pub fn create_default_tables(conn: &Conn) {
                     ON DELETE CASCADE
                     ON UPDATE NO ACTION
             );
+
+        CREATE TABLE IF NOT EXISTS backups (
+                id INTEGER NOT NULL PRIMARY KEY,
+                user_id INTEGER NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                FOREIGN KEY (user_id)
+                    REFERENCES users(id)
+                    ON DELETE CASCADE
+                    ON UPDATE NO ACTION
+            );
         ",
     ) {
         Ok(it) => it,
         Err(_) => return,
     }
 }
+
+

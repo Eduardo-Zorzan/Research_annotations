@@ -25,10 +25,10 @@ body {
 .login_card {
   width: 100%;
   max-width: 400px;
-  background: #ffffff;
+  background: var(--color-card-bg);
   border-radius: 12px;
-  border: 1.5px solid var(--color-table-border);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+  border: 1.5px solid var(--color-card-border);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
   padding: 36px 32px;
   display: flex;
   flex-direction: column;
@@ -53,7 +53,8 @@ body {
   justify-content: center;
   font-size: 22px;
   margin-bottom: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--color-card-border);
 }
 
 .login_title {
@@ -73,12 +74,12 @@ body {
   display: none;
   align-items: center;
   gap: 10px;
-  background: hsla(0, 84%, 60%, 0.1);
-  border: 1px solid hsla(0, 84%, 60%, 0.25);
+  background: hsla(0, 84%, 60%, 0.15);
+  border: 1px solid hsla(0, 84%, 60%, 0.35);
   border-radius: 8px;
   padding: 10px 14px;
   font-size: 13px;
-  color: #dc2626;
+  color: #f87171;
   margin-bottom: 20px;
   animation: alertFadeIn 0.2s ease-out;
 }
@@ -139,9 +140,9 @@ body {
 .form_input {
   width: 100%;
   padding: 10px 14px 10px 38px;
-  border: 1.5px solid var(--color-table-border);
+  border: 1.5px solid var(--color-card-border);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--color-main-bg);
   font-family: inherit;
   font-size: 14px;
   color: var(--color-text-primary);
@@ -151,12 +152,12 @@ body {
 
 .form_input::placeholder {
   color: var(--color-text-secondary);
-  opacity: 0.65;
+  opacity: 0.7;
 }
 
 .form_input:focus {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px hsla(210, 60%, 55%, 0.18);
+  box-shadow: 0 0 0 3px hsla(210, 60%, 55%, 0.25);
 }
 
 .input_wrapper:focus-within .input_icon {
@@ -168,7 +169,7 @@ body {
 }
 
 .form_input.input-error:focus {
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25);
 }
 
 .form_input--password {
@@ -193,7 +194,7 @@ body {
 
 .password_toggle_btn:hover {
   color: var(--color-text-primary);
-  background: hsla(220, 14%, 86%, 0.5);
+  background: hsla(220, 14%, 26%, 0.6);
 }
 
 .login_submit_btn {
@@ -218,7 +219,7 @@ body {
 .login_submit_btn:hover {
   background: var(--color-accent-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px hsla(210, 60%, 55%, 0.25);
+  box-shadow: 0 4px 14px hsla(210, 60%, 55%, 0.35);
 }
 
 .login_submit_btn:active {

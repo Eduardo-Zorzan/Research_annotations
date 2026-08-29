@@ -31,9 +31,27 @@ This skill maintains the cumulative architectural knowledge, guidelines, and des
    - Ensure the toolbar container and `.ce-popover` remain active so typing `/` triggers the block menu.
    - **Header**: Contains only Title, status badge ("Saved" / "Unsaved changes"), Maximize button, and Close (`X`) button.
    - **Footer**: Contains only keyboard hint (`Press ⌘S to save | Esc to close`) and primary **Save** button.
+   - **Theme Support**: Fully adheres to dynamic theme changes (`data-theme`), updating modal window, canvas background, Editor.js text, popovers, inline toolbars, code blocks, tables, checklists, and footer.
    - **Never Revert User Removals**: Never re-create elements, buttons, or layouts that the user has removed.
 
+
+6. **Configuration / Settings Modal UI Specifications**:
+   - Triggered via settings gear button (`#main-settings` / `.main_settings`) located on the top right corner.
+   - **Appearance Section**: 3 preview cards for "Light", "Dark", and "System" themes. Themes are persisted in `localStorage` (`app_theme`), support OS `prefers-color-scheme` change listeners in "System" mode, and apply `[data-theme="dark"]` CSS variables.
+   - **Backup Section**: Displays last backup datetime (`Backup Generated in {datetime}`), "Download" button to export a JSON backup, "Import" button to upload and restore JSON backup into SQLite in a transaction, and "Generate new backup" button to timestamp the backup.
+   - **Token Section**: "Create new token" button which calls `/tokens` for a stateless encrypted token with user ID and expiration, displaying a security notice and copy-to-clipboard button.
+   - **Account Section**: "Logout" button which deletes session cookie and redirects to login page (`/`).
+
+7. **Login Page Always Dark Mode**:
+   - The login interface (`login.html` and `login.css`) is permanently set to dark mode (`data-theme="dark"`), using dark backgrounds, dark card styling, and dark input fields.
+
+8. **Data Table Dark Theme Specifications**:
+   - In dark mode, `.table_new_row` uses `hsla(220, 18%, 18%, 0.4)` and hover `hsla(220, 18%, 22%, 0.5)` to seamlessly blend with the table.
+   - Row hover uses `hsla(220, 14%, 26%, 0.4)` instead of light semi-transparent overlays.
+
 ---
+
+
 
 ## 2. System Architecture
 
@@ -46,14 +64,18 @@ This skill maintains the cumulative architectural knowledge, guidelines, and des
 
 #### Database Schema:
 - `users (id INTEGER PRIMARY KEY, name TEXT, password TEXT)`
-- `tokens (id INTEGER PRIMARY KEY, token TEXT, user_id INTEGER, expiration_date TEXT)`
 - `tables (id INTEGER PRIMARY KEY, description TEXT, user_id INTEGER, position INTEGER DEFAULT 0)`
 - `table_details (id INTEGER PRIMARY KEY, table_id INTEGER, annotation TEXT, name TEXT, link TEXT, creation_date TEXT, position INTEGER DEFAULT 0)`
+- `backups (id INTEGER PRIMARY KEY, user_id INTEGER UNIQUE, created_at TEXT, file_path TEXT)`
 
 #### Cryptography & Authentication:
 - `CryptoService` uses AES-256-GCM (`aes-gcm` crate) with 12-byte random nonce and Base64 output.
 - `Keys::Login` (`LOGIN_KEY` in `.env`): Used for encrypting and decrypting user passwords in the `users` table.
-- `auth_middleware` (`src/handlers/auth.rs`): Applied to protected routes (`/home`, `/tables`, `/table_details`) via `axum::middleware::from_fn`. Extracts session token from `Cookie` header (with `Authorization` header fallback) and validates expiration/signature. For unauthorized page navigations (`/home`), returns `Redirect::to("/")`; for unauthorized API requests, returns `401 Unauthorized`. Injects `AuthUser { user_id }` into request extensions for handlers.
+- `Keys::Token` (`TOKEN_KEY` in `.env`): Used for stateless token encryption/decryption containing `user_id` and `expired_at`. Tokens do not require database persistence.
+- `auth_middleware` (`src/handlers/auth.rs`): Applied to protected routes (`/home`, `/tables`, `/table_details`, `/backup/*`, `/tokens`) via `axum::middleware::from_fn`. Extracts session token from `Cookie` header (with `Authorization` header fallback) and validates expiration/signature. For unauthorized page navigations (`/home`), returns `Redirect::to("/")`; for unauthorized API requests, returns `401 Unauthorized`. Injects `AuthUser { user_id }` into request extensions for handlers.
+
+#### Background Services:
+- **Hourly Automated Backups**: Tokio background worker running at a 1-hour interval that iterates through all registered users and updates their `./backups/{user_id}/backup.json` and database records without user intervention.
 
 #### REST API Endpoints:
 - `GET /`: Serves login page (`login.html`).
@@ -65,6 +87,13 @@ This skill maintains the cumulative architectural knowledge, guidelines, and des
 - `GET /:table_id/table_details`: Fetches details rows ordered by `position ASC, id ASC`.
 - `POST /table_details`, `PUT /table_details`, `DELETE /table_details`: Manage detail rows.
 - `PUT /table_details/reorder`: Reorders detail rows in an SQLite transaction.
+- `GET /backup/info`: Returns latest backup timestamp `{ "last_backup": "..." }` for authenticated user.
+- `POST /backup/generate`: Overwrites/saves `./backups/{user_id}/backup.json` and updates SQLite record.
+- `GET /backup/download`: Returns user's stored backup JSON file or 404 with error message if no backup exists on the server.
+- `POST /backup/import`: Wipes/replaces existing tables and details in an SQLite transaction with imported backup payload data for the active user (with frontend confirmation modal before execution).
+- `POST /tokens`: Creates a new stateless encrypted token for authenticated user.
+
+
 
 ---
 
@@ -74,11 +103,12 @@ This skill maintains the cumulative architectural knowledge, guidelines, and des
 - **Modules**:
   - `login.ts`: Login form validation, async sign-in request, user session storage, error messaging.
   - `cookies.ts`: Reusable cookie management utility (`setCookie`, `getCookie`, `deleteCookie`).
-  - `home.ts`: Layout initialization, sidebar toggle, resize handle, and table loading.
+  - `home.ts`: Layout initialization, sidebar toggle, resize handle, theme loading, config modal binding, and table loading.
   - `sidebar.ts`: Table card creation, inline renaming, deletion, drag-and-drop table reordering.
   - `tableDetails.ts`: Fixed columns (`Details`, `Name`, `Link`), row drag-and-drop reordering, inline cell editing, 3-dots row options.
   - `annotationModal.ts`: Resizable & maximizable rich text modal for notes using Editor.js.
   - `blockEditor.ts`: Slash command / block editor module.
+  - `configModal.ts`: Settings/Configuration modal handling theme selection, backup operations (info, generate, download, import), token generation & copying, and user logout.
 
 ---
 

@@ -4,14 +4,18 @@ import {
   initAddTable,
   loadTables,
 } from "./sidebar.js";
+import { initConfigModal, initTheme } from "./configModal.js";
 
 document.addEventListener("DOMContentLoaded", () => {
+  initTheme();
+
   const layout = document.getElementById("layout");
   const sidebarToggle = document.getElementById("sidebar-toggle");
   const mainToggle = document.getElementById("main-toggle");
   const sidebarTables = document.getElementById("sidebar-tables");
   const resizeHandle = document.getElementById("sidebar-resize");
   const addTableBtn = document.getElementById("sidebar-add-table");
+  const settingsBtn = document.getElementById("main-settings") as HTMLButtonElement | null;
 
   if (!layout || !sidebarToggle || !mainToggle || !sidebarTables || !resizeHandle) return;
 
@@ -21,5 +25,10 @@ document.addEventListener("DOMContentLoaded", () => {
     initAddTable(addTableBtn, sidebarTables);
   }
   loadTables(sidebarTables);
-});
 
+  if (settingsBtn) {
+    initConfigModal(settingsBtn, () => {
+      loadTables(sidebarTables);
+    });
+  }
+});
