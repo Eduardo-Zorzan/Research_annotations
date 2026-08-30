@@ -122,3 +122,7 @@ This skill maintains the cumulative architectural knowledge, guidelines, and des
 - **Run Server**: `cargo run` (listens on `http://0.0.0.0:3000`)
 - **Create User CLI**: `cargo run --bin new_users -- <username> <password>`
 - **Zed Task**: Run task configured as `(kill -9 $(lsof -t -i:3000) 2>/dev/null || true); npx tsc && cargo run`
+- **Docker Compose (Build & Run)**: `docker compose up --build -d`
+- **Docker Compose (Stop)**: `docker compose down`
+- **Docker Create User CLI**: `docker compose exec app /app/new_users <username> <password>`
+

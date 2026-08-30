@@ -1,0 +1,15 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: research_annotations
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      - ./my_database.db:/app/my_database.db
+      - ./uploads:/app/uploads
+      - ./backups:/app/backups
+    restart: unless-stopped

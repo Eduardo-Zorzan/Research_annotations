@@ -1,0 +1,9 @@
+target
+node_modules
+.git
+.agents
+.vscode
+.zed
+my_database.db
+uploads
+backups
