@@ -28,6 +28,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   let activeTabUrl = "";
   let currentAppUrl = "";
   let currentToken = "";
+  let currentTablesList = [];
   const tableRowsCache = new Map();
   let toastTimer = null;
 
@@ -225,12 +226,18 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
-    await chrome.storage.local.set({ last_table_id: tableId });
+    const matchedTable = currentTablesList.find((t) => String(t.id) === String(tableId));
+    const tableDescription = matchedTable ? matchedTable.description : customSelectText.textContent;
+
+    await chrome.storage.local.set({
+      last_table_id: tableId,
+      last_table_description: tableDescription,
+    });
     await fetchTableRows(tableId);
     checkDuplicateName();
   }
 
-  async function loadTablesList(preferredTableId = null) {
+  async function loadTablesList(preferredTableId = null, preferredTableDescription = null) {
     setSelectState("Loading tables...", true);
     addBtn.disabled = true;
 
@@ -263,20 +270,30 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       const tables = await response.json();
       if (!Array.isArray(tables) || tables.length === 0) {
+        currentTablesList = [];
         setSelectState("No tables found", true);
         addBtn.disabled = true;
         return true;
       }
 
+      currentTablesList = tables;
       customSelectTrigger.disabled = false;
       addBtn.disabled = false;
 
-      let selectTarget = preferredTableId;
-      if (!selectTarget || !tables.some((t) => String(t.id) === String(selectTarget))) {
-        selectTarget = tables[0].id;
+      let selectedTable = null;
+
+      if (preferredTableDescription) {
+        selectedTable = tables.find((t) => t.description === preferredTableDescription);
       }
 
-      const selectedTable = tables.find((t) => String(t.id) === String(selectTarget)) || tables[0];
+      if (!selectedTable && preferredTableId) {
+        selectedTable = tables.find((t) => String(t.id) === String(preferredTableId));
+      }
+
+      if (!selectedTable) {
+        selectedTable = tables[0];
+      }
+
       renderCustomOptions(tables, selectedTable.id);
       setSelectedTable(selectedTable.id, selectedTable.description);
 
@@ -424,7 +441,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       closeSettingsModal();
       showToast("Settings saved successfully");
       tableRowsCache.clear();
-      await loadTablesList();
+      const { last_table_id, last_table_description } = await chrome.storage.local.get([
+        "last_table_id",
+        "last_table_description",
+      ]);
+      await loadTablesList(last_table_id, last_table_description);
     } catch {
       modalError.textContent = "Connection failed: URL unreachable";
       modalError.classList.remove("hidden");
@@ -439,6 +460,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     "app_url",
     "user_token",
     "last_table_id",
+    "last_table_description",
   ]);
 
   const initialTheme = stored.extension_theme || "dark";
@@ -496,6 +518,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (!currentToken) {
     openSettingsModal();
   } else {
-    await loadTablesList(stored.last_table_id);
+    await loadTablesList(stored.last_table_id, stored.last_table_description);
   }
 });
