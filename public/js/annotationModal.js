@@ -568,3 +568,15 @@ export async function closeAnnotationModal() {
     modalBackdrop?.classList.remove("active");
     currentDetail = null;
 }
+export function isAnnotationModalOpen() {
+    return Boolean(modalBackdrop?.classList.contains("active"));
+}
+export function getCurrentAnnotationDetailId() {
+    if (modalBackdrop?.classList.contains("active") && currentDetail) {
+        return currentDetail.id;
+    }
+    return null;
+}
+export function hasUnsavedModalChanges() {
+    return Boolean(modalBackdrop?.classList.contains("active") && isUnsaved);
+}

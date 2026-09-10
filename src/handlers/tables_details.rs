@@ -19,6 +19,12 @@ pub struct TableDetailsReturn {
     pub position: Option<i32>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TableDetailsCheck {
+    pub count: i64,
+    pub max_id: i64,
+}
+
 #[derive(Deserialize, Debug)]
 pub struct TableDetails {
     pub id: Option<String>,
@@ -38,6 +44,44 @@ pub struct DeleteTableDetailsPayload {
 pub struct ReorderTableDetailsPayload {
     pub table_id: String,
     pub ids: Vec<String>,
+}
+
+#[axum::debug_handler]
+pub async fn check_status(
+    State(conn): State<helpers::types::Conn>,
+    Path(table_id): Path<String>,
+) -> Result<Json<TableDetailsCheck>, StatusCode> {
+    let Ok(_conn) = conn.lock() else {
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    };
+
+    let crypto_service = match CryptoService::new(helpers::encryption::Keys::Token) {
+        Ok(crypto) => crypto,
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+
+    let table_id_decrypted: String = match crypto_service.decrypt(table_id) {
+        Ok(t_id) => t_id,
+        Err(_) => return Err(StatusCode::FORBIDDEN),
+    };
+
+    let (count, max_id): (i64, i64) = match _conn.query_row(
+        "
+            SELECT COUNT(*), COALESCE(MAX(id), 0)
+            FROM table_details
+            WHERE table_id = ?1
+        ",
+        params![table_id_decrypted],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    ) {
+        Ok(data) => data,
+        Err(err) => {
+            println!("Error checking table_details: {}", err);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    Ok(Json(TableDetailsCheck { count, max_id }))
 }
 
 #[axum::debug_handler]

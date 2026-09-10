@@ -85,6 +85,7 @@ This skill maintains the cumulative architectural knowledge, guidelines, and des
 - `POST /tables`, `PUT /tables`, `DELETE /tables`: Manage table cards for authenticated user.
 - `PUT /tables/reorder`: Reorders table cards in an SQLite transaction.
 - `GET /:table_id/table_details`: Fetches details rows ordered by `position ASC, id ASC`.
+- `GET /:table_id/table_details/check`: Returns `{ "count": ..., "max_id": ... }` using a lightweight SQLite aggregation query for real-time change detection.
 - `POST /table_details`, `PUT /table_details`, `DELETE /table_details`: Manage detail rows.
 - `PUT /table_details/reorder`: Reorders detail rows in an SQLite transaction.
 - `GET /backup/info`: Returns latest backup timestamp `{ "last_backup": "..." }` for authenticated user.
@@ -106,8 +107,8 @@ This skill maintains the cumulative architectural knowledge, guidelines, and des
   - `cookies.ts`: Reusable cookie management utility (`setCookie`, `getCookie`, `deleteCookie`).
   - `home.ts`: Layout initialization, sidebar toggle, resize handle, theme loading, config modal binding, and table loading.
   - `sidebar.ts`: Table card creation, inline renaming, deletion, drag-and-drop table reordering.
-  - `tableDetails.ts`: Fixed columns (`Details`, `Name`, `Link`), row drag-and-drop reordering, inline cell editing, 3-dots row options.
-  - `annotationModal.ts`: Resizable & maximizable rich text modal for notes using Editor.js, client-side canvas image downscaling/compression to WebP, and asynchronous image uploading.
+  - `tableDetails.ts`: Fixed columns (`Details`, `Name`, `Link`), row drag-and-drop reordering, inline cell editing, 3-dots row options. Keyed in-place DOM reconciliation (`syncTableDetails`) and real-time auto-checking (`checkForNewRows`) listening to window focus, document visibilitychange, and periodic polling (3.5s) to display new extension-added rows without losing active inline inputs, cursor positions, bottom new item drafts, or open modals.
+  - `annotationModal.ts`: Resizable & maximizable rich text modal for notes using Editor.js, client-side canvas image downscaling/compression to WebP, and asynchronous image uploading. State getters (`isAnnotationModalOpen`, `getCurrentAnnotationDetailId`) protect ongoing note editing during table sync.
   - `blockEditor.ts`: Slash command / block editor module.
   - `configModal.ts`: Settings/Configuration modal handling theme selection, backup operations (info, generate, download, import with replacement confirmation dialog), token generation & copying, and user logout.
 

@@ -16,9 +16,9 @@ use rusqlite::Connection;
 
 use crate::helpers::{
     routes::{
-        BACKUP_DOWNLOAD, BACKUP_GENERATE, BACKUP_IMPORT, BACKUP_INFO, GET_HOME, GET_LOGIN,
-        GET_TABLE_DETAILS, GET_TABLES, LOGIN, REORDER_TABLE_DETAILS, REORDER_TABLES, SERVE_IMAGE,
-        TABLE_DETAILS, TABLES, TOKENS, UPLOAD_IMAGE,
+        BACKUP_DOWNLOAD, BACKUP_GENERATE, BACKUP_IMPORT, BACKUP_INFO, CHECK_TABLE_DETAILS,
+        GET_HOME, GET_LOGIN, GET_TABLE_DETAILS, GET_TABLES, LOGIN, REORDER_TABLE_DETAILS,
+        REORDER_TABLES, SERVE_IMAGE, TABLE_DETAILS, TABLES, TOKENS, UPLOAD_IMAGE,
     },
     types::Conn,
 };
@@ -39,6 +39,7 @@ async fn main() {
             post(tables::post).put(tables::put).delete(tables::delete),
         )
         .route(REORDER_TABLES, put(tables::reorder))
+        .route(CHECK_TABLE_DETAILS, get(tables_details::check_status))
         .route(GET_TABLE_DETAILS, get(tables_details::get))
         .route(
             TABLE_DETAILS,
