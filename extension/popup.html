@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Research Annotations</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="extension_container">
+    <header class="extension_header">
+      <div class="header_brand">
+        <i class="fa-solid fa-table-list header_logo"></i>
+        <span class="header_title">Research Annotations</span>
+      </div>
+      <div class="header_actions">
+        <button id="theme-toggle-btn" class="header_icon_btn" type="button" title="Toggle theme">
+          <i id="theme-sun-icon" class="fa-solid fa-sun theme_icon"></i>
+          <i id="theme-moon-icon" class="fa-solid fa-moon theme_icon hidden"></i>
+        </button>
+        <button id="settings-btn" class="header_icon_btn" type="button" title="Settings">
+          <i class="fa-solid fa-gear"></i>
+        </button>
+      </div>
+    </header>
+
+    <main class="extension_main">
+      <div class="form_group">
+        <label id="table-select-label" class="form_label">Tables</label>
+        <div id="custom-select" class="custom_select">
+          <button id="custom-select-trigger" class="custom_select_trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="table-select-label custom-select-text">
+            <span id="custom-select-text" class="custom_select_text">Loading tables...</span>
+            <i id="custom-select-arrow" class="fa-solid fa-chevron-down custom_select_arrow"></i>
+          </button>
+          <div id="custom-select-menu" class="custom_select_menu hidden" role="listbox" tabindex="-1"></div>
+          <select id="table-select" class="sr_only" tabindex="-1" aria-hidden="true"></select>
+        </div>
+      </div>
+
+      <div class="form_group">
+        <label for="name-input" class="form_label">Name Annotation</label>
+        <input id="name-input" type="text" class="form_input" placeholder="Page title or annotation name" autocomplete="off" />
+        <div id="duplicate-warning" class="duplicate_badge hidden">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span>Already registered</span>
+        </div>
+      </div>
+
+      <div class="action_group">
+        <button id="add-btn" class="primary_add_btn" type="button">
+          <i class="fa-solid fa-plus btn_icon"></i>
+          <span id="add-btn-text">Add</span>
+        </button>
+      </div>
+
+      <div id="status-toast" class="toast hidden"></div>
+    </main>
+
+    <div id="settings-modal" class="modal_backdrop hidden">
+      <div class="modal_card">
+        <div class="modal_header">
+          <h2 class="modal_title">Settings</h2>
+          <button id="modal-close-btn" class="modal_close_btn" type="button" title="Close">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div class="modal_body">
+          <div class="form_group">
+            <label for="settings-app-url" class="form_label">App Url</label>
+            <input id="settings-app-url" type="text" class="form_input" placeholder="http://localhost:3000" />
+          </div>
+          <div class="form_group">
+            <label for="settings-token" class="form_label">Token</label>
+            <textarea id="settings-token" class="form_textarea" rows="3" placeholder="Paste your access token here"></textarea>
+          </div>
+          <div id="modal-error" class="modal_error hidden"></div>
+          <div class="modal_actions">
+            <button id="settings-load-btn" class="modal_load_btn" type="button">
+              <span id="load-btn-text">Load</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

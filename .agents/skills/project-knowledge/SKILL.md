@@ -111,6 +111,19 @@ This skill maintains the cumulative architectural knowledge, guidelines, and des
   - `blockEditor.ts`: Slash command / block editor module.
   - `configModal.ts`: Settings/Configuration modal handling theme selection, backup operations (info, generate, download, import with replacement confirmation dialog), token generation & copying, and user logout.
 
+---
+
+### Chrome Extension (Manifest V3)
+- **Source**: `extension/`
+- **Files**:
+  - `manifest.json`: Manifest V3 configuration with `storage`, `activeTab`, `tabs` permissions and `<all_urls>` host permissions.
+  - `popup.html`: Popup interface using FontAwesome 6 icons (`all.min.css`), containing theme switcher (`fa-sun`/`fa-moon`), settings modal trigger (`fa-gear`), custom DOM dropdown component for table selection (avoiding macOS native select coordinate misalignment), name annotation input, duplicate warning badge (`fa-triangle-exclamation`), primary add button (`fa-plus`), and modal close button (`fa-xmark`).
+  - `popup.css`: CSS variables adapted from `public/style/variables.css` for both light and dark themes, with blur backdrop modal. Enforces strict 350px width constraints on `html`, `body`, and `.extension_container` with `overflow-x: hidden`, custom dropdown menu and option styles, and uses margin-auto centering (`left: 16px; right: 16px; margin: 0 auto; width: fit-content; max-width: calc(100% - 32px)`) with dedicated `toastFadeIn` animation to prevent Chrome popup window expansion.
+  - `popup.js`: Pure async/await logic for token authentication with `credentials: "omit"` on all requests, custom dropdown menu controller, fetching tables and details, real-time duplicate name detection against existing rows in the selected table, tab URL & title capture, settings persistence, clearing input with duplicate badge reset and `fa-check` button feedback on addition.
+  - `icons/`: High-resolution PNG icons (16px, 48px, 128px).
+- **Backend CORS & Authentication Middleware**:
+  - `cors_middleware` in `src/main.rs`: Responds to preflight `OPTIONS` requests with `204 No Content` and appropriate `Access-Control-Allow-*` headers, and attaches `Access-Control-Allow-Origin: *` to responses to enable external extension requests.
+  - `auth_middleware` in `src/handlers/auth.rs`: Evaluates `token_from_header` (`Authorization: Bearer <token>`) with precedence over `token_from_cookie`. Explicit `Authorization` headers are validated directly against `token::verify_token` without ambient cookie fallback, rejecting invalid tokens with `401 Unauthorized`.
 
 ---
 
@@ -125,4 +138,16 @@ This skill maintains the cumulative architectural knowledge, guidelines, and des
 - **Docker Compose (Build & Run)**: `docker compose up --build -d`
 - **Docker Compose (Stop)**: `docker compose down`
 - **Docker Create User CLI**: `docker compose exec app /app/new_users <username> <password>`
+- **Load Extension in Chrome**: Open `chrome://extensions` -> enable Developer mode -> click "Load unpacked" -> select `extension/` directory.
+
+---
+
+## 4. Running in Termux (Android)
+
+- **Source of Termux**: Install Termux from F-Droid or GitHub releases (never Google Play Store, as Play Store builds are deprecated and fail package updates).
+- **Embedded Frontend**: `public/js/` is tracked in git and pre-compiled. Node.js is NOT required on Android devices when running or building the server.
+- **Dependencies in Termux**: `pkg update && pkg install -y git rust clang binutils`.
+- **Preventing OOM on Budget Devices**: Budget Android phones (1GB - 3GB RAM) trigger Android Low Memory Killer (LMK `SIGKILL`) if multiple rustc threads spawn. Must build with constrained threads: `CARGO_BUILD_JOBS=1 cargo build --release` (or `-j 1`).
+- **Android Wake-Lock**: Run `termux-wake-lock` and disable battery optimization for Termux in Android Settings to prevent the operating system from suspending CPU or network during compilation or server hosting.
+- **Port and Access**: Axum listens on `0.0.0.0:3000`. Accessible locally via `http://localhost:3000` or across LAN via `http://<device-ip>:3000`.
 

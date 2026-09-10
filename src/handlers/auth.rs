@@ -55,7 +55,7 @@ pub async fn auth_middleware(mut request: Request, next: Next) -> Response {
         .and_then(|v| v.to_str().ok())
         .map(|raw| url_decode(raw.strip_prefix("Bearer ").unwrap_or(raw)));
 
-    let token_str = token_from_cookie.or(token_from_header);
+    let token_str = token_from_header.or(token_from_cookie);
 
     let is_page_request = request
         .headers()

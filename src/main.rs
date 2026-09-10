@@ -61,12 +61,51 @@ async fn main() {
         .route(GET_LOGIN, get(login::get_login))
         .route(LOGIN, post(login::post))
         .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
+        .layer(axum::middleware::from_fn(cors_middleware))
         .with_state(conn)
         .fallback(assets::static_handler);
 
-
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
     axum::serve(listener, app).await.unwrap();
+}
+
+async fn cors_middleware(
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::http::{HeaderValue, Method, StatusCode, header};
+
+    if request.method() == Method::OPTIONS {
+        return axum::response::Response::builder()
+            .status(StatusCode::NO_CONTENT)
+            .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+            .header(
+                header::ACCESS_CONTROL_ALLOW_METHODS,
+                "GET, POST, PUT, DELETE, OPTIONS",
+            )
+            .header(
+                header::ACCESS_CONTROL_ALLOW_HEADERS,
+                "Authorization, Content-Type, Accept",
+            )
+            .header(header::ACCESS_CONTROL_MAX_AGE, "86400")
+            .body(axum::body::Body::empty())
+            .unwrap();
+    }
+
+    let mut response = next.run(request).await;
+    response.headers_mut().insert(
+        header::ACCESS_CONTROL_ALLOW_ORIGIN,
+        HeaderValue::from_static("*"),
+    );
+    response.headers_mut().insert(
+        header::ACCESS_CONTROL_ALLOW_METHODS,
+        HeaderValue::from_static("GET, POST, PUT, DELETE, OPTIONS"),
+    );
+    response.headers_mut().insert(
+        header::ACCESS_CONTROL_ALLOW_HEADERS,
+        HeaderValue::from_static("Authorization, Content-Type, Accept"),
+    );
+    response
 }
 
 fn create_backup_routine(conn: Conn) {
