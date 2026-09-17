@@ -31,7 +31,8 @@ This skill maintains the cumulative architectural knowledge, guidelines, and des
    - Ensure the toolbar container and `.ce-popover` remain active so typing `/` triggers the block menu.
    - **Header**: Contains only Title, status badge ("Saved" / "Unsaved changes"), Maximize button, and Close (`X`) button.
    - **Footer**: Contains only keyboard hint (`Press ⌘S to save | Esc to close`) and primary **Save** button.
-   - **Theme Support**: Fully adheres to dynamic theme changes (`data-theme`), updating modal window, canvas background, Editor.js text, popovers, inline toolbars, code blocks, tables, checklists, and footer.
+   - **Theme Support**: Fully adheres to dynamic theme changes (`data-theme`), updating modal window, canvas background, Editor.js text, popovers, inline toolbars, code blocks, tables, checklists, and footer. Multi-block selections (`.ce-block--selected .ce-block__content`) and inline selections (`::selection`) use translucent accent highlights (`rgba(59, 130, 246, 0.28)` in dark mode, `0.15` in light mode) preventing bright white block clashes with dark mode text.
+   - **Discard Confirmation Modal**: Never use blocking browser `confirm()` or `alert()` dialogs, as native dialogs glitch macOS window management and un-maximize/minimize fullscreen Chrome windows. Use the custom in-app confirmation modal (`.confirm_modal_backdrop`, `.confirm_modal_window`) with 'Keep Editing' and 'Discard' buttons, properly capturing and preventing `Escape` event bubbling.
    - **Never Revert User Removals**: Never re-create elements, buttons, or layouts that the user has removed.
 
 
@@ -107,7 +108,7 @@ This skill maintains the cumulative architectural knowledge, guidelines, and des
   - `cookies.ts`: Reusable cookie management utility (`setCookie`, `getCookie`, `deleteCookie`).
   - `home.ts`: Layout initialization, sidebar toggle, resize handle, theme loading, config modal binding, and table loading.
   - `sidebar.ts`: Table card creation, inline renaming, deletion, drag-and-drop table reordering.
-  - `tableDetails.ts`: Fixed columns (`Details`, `Name`, `Link`), row drag-and-drop reordering, inline cell editing, 3-dots row options. Keyed in-place DOM reconciliation (`syncTableDetails`) and real-time auto-checking (`checkForNewRows`) listening to window focus, document visibilitychange, and periodic polling (3.5s) to display new extension-added rows without losing active inline inputs, cursor positions, bottom new item drafts, or open modals.
+  - `tableDetails.ts`: Fixed columns (`Details`, `Name`, `Link`), row drag-and-drop reordering, inline cell editing, 3-dots row options. Long links exceeding 100 characters are truncated with an ellipsis and expand to full length on hover (tracked via `dataset.fullLink` to prevent polling re-renders). Keyed in-place DOM reconciliation (`syncTableDetails`) and real-time auto-checking (`checkForNewRows`) listening to window focus, document visibilitychange, and periodic polling (3.5s) to display new extension-added rows without losing active inline inputs, cursor positions, bottom new item drafts, or open modals.
   - `annotationModal.ts`: Resizable & maximizable rich text modal for notes using Editor.js, client-side canvas image downscaling/compression to WebP, and asynchronous image uploading. State getters (`isAnnotationModalOpen`, `getCurrentAnnotationDetailId`) protect ongoing note editing during table sync.
   - `blockEditor.ts`: Slash command / block editor module.
   - `configModal.ts`: Settings/Configuration modal handling theme selection, backup operations (info, generate, download, import with replacement confirmation dialog), token generation & copying, and user logout.

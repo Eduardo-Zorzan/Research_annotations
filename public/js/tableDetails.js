@@ -251,6 +251,26 @@ function renderHeader() {
     </tr>
   `;
 }
+function createLinkAnchor(rawLink) {
+    const linkAnchor = document.createElement("a");
+    const href = rawLink.startsWith("http://") || rawLink.startsWith("https://")
+        ? rawLink
+        : `https://${rawLink}`;
+    linkAnchor.href = href;
+    linkAnchor.target = "_blank";
+    linkAnchor.rel = "noopener noreferrer";
+    linkAnchor.className = "table_details_link";
+    linkAnchor.title = rawLink;
+    linkAnchor.dataset.fullLink = rawLink;
+    if (rawLink.length > 100) {
+        const truncated = `${rawLink.slice(0, 100)}...`;
+        linkAnchor.textContent = truncated;
+    }
+    else {
+        linkAnchor.textContent = rawLink;
+    }
+    return linkAnchor;
+}
 function createRowElement(detail, index) {
     const row = document.createElement("tr");
     row.className = "table_row";
@@ -377,15 +397,7 @@ function createRowElement(detail, index) {
     const renderLinkDisplay = () => {
         linkContainer.innerHTML = "";
         if (detail.link && detail.link.trim() !== "") {
-            const linkAnchor = document.createElement("a");
-            const href = detail.link.startsWith("http://") || detail.link.startsWith("https://")
-                ? detail.link
-                : `https://${detail.link}`;
-            linkAnchor.href = href;
-            linkAnchor.target = "_blank";
-            linkAnchor.rel = "noopener noreferrer";
-            linkAnchor.className = "table_details_link";
-            linkAnchor.textContent = detail.link;
+            const linkAnchor = createLinkAnchor(detail.link);
             linkContainer.appendChild(linkAnchor);
         }
         else {
@@ -551,20 +563,12 @@ function updateRowElement(row, detail, index) {
         const linkContainer = linkCell.querySelector(".link_cell_container");
         if (linkContainer) {
             const currentAnchor = linkContainer.querySelector("a.table_details_link");
-            const currentLinkText = currentAnchor ? currentAnchor.textContent : "";
+            const currentFullLink = currentAnchor ? (currentAnchor.dataset.fullLink || currentAnchor.textContent || "") : "";
             const targetLink = detail.link || "";
-            if (currentLinkText !== targetLink) {
+            if (currentFullLink !== targetLink) {
                 linkContainer.innerHTML = "";
                 if (detail.link && detail.link.trim() !== "") {
-                    const linkAnchor = document.createElement("a");
-                    const href = detail.link.startsWith("http://") || detail.link.startsWith("https://")
-                        ? detail.link
-                        : `https://${detail.link}`;
-                    linkAnchor.href = href;
-                    linkAnchor.target = "_blank";
-                    linkAnchor.rel = "noopener noreferrer";
-                    linkAnchor.className = "table_details_link";
-                    linkAnchor.textContent = detail.link;
+                    const linkAnchor = createLinkAnchor(detail.link);
                     linkContainer.appendChild(linkAnchor);
                 }
                 else {

@@ -18,6 +18,8 @@ let currentDetail: TableDetail | null = null;
 let isUnsaved: boolean = false;
 let onSaveCallback: ((updatedDetail: TableDetail) => Promise<boolean | void>) | null = null;
 let isMaximized: boolean = false;
+let discardConfirmBackdrop: HTMLElement | null = null;
+let discardConfirmResolve: ((value: boolean) => void) | null = null;
 
 function showToast(message: string): void {
   if (!toastEl) return;
@@ -546,6 +548,19 @@ function createModalDOM(): void {
   });
 
   window.addEventListener("keydown", async (e: KeyboardEvent) => {
+    if (discardConfirmBackdrop?.classList.contains("active")) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        discardConfirmBackdrop.classList.remove("active");
+        if (discardConfirmResolve) {
+          discardConfirmResolve(false);
+          discardConfirmResolve = null;
+        }
+      }
+      return;
+    }
+
     if (!modalBackdrop?.classList.contains("active")) return;
 
     if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
@@ -557,7 +572,8 @@ function createModalDOM(): void {
         return;
       }
       e.preventDefault();
-      closeAnnotationModal();
+      e.stopPropagation();
+      await closeAnnotationModal();
     }
   });
 }
@@ -642,18 +658,105 @@ export async function openAnnotationModal(
   await initEditorInstance(initialData);
 }
 
+function createDiscardConfirmDOM(): void {
+  if (discardConfirmBackdrop) return;
+
+  discardConfirmBackdrop = document.createElement("div");
+  discardConfirmBackdrop.className = "confirm_modal_backdrop";
+
+  const confirmWindow = document.createElement("div");
+  confirmWindow.className = "confirm_modal_window";
+
+  const header = document.createElement("div");
+  header.className = "confirm_modal_header";
+
+  const icon = document.createElement("i");
+  icon.className = "fa-solid fa-triangle-exclamation confirm_modal_icon";
+
+  const title = document.createElement("h3");
+  title.className = "confirm_modal_title";
+  title.textContent = "Discard Unsaved Changes?";
+
+  header.appendChild(icon);
+  header.appendChild(title);
+
+  const text = document.createElement("p");
+  text.className = "confirm_modal_text";
+  text.textContent =
+    "You have unsaved changes. Do you really want to discard them and exit?";
+
+  const actions = document.createElement("div");
+  actions.className = "confirm_modal_actions";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "config_btn config_btn--secondary";
+  cancelBtn.textContent = "Keep Editing";
+
+  const discardBtn = document.createElement("button");
+  discardBtn.type = "button";
+  discardBtn.className = "config_btn config_btn--danger";
+  discardBtn.innerHTML = '<i class="fa-solid fa-trash-can"></i> Discard';
+
+  const handleCancel = () => {
+    discardConfirmBackdrop?.classList.remove("active");
+    if (discardConfirmResolve) {
+      discardConfirmResolve(false);
+      discardConfirmResolve = null;
+    }
+  };
+
+  const handleDiscard = () => {
+    discardConfirmBackdrop?.classList.remove("active");
+    if (discardConfirmResolve) {
+      discardConfirmResolve(true);
+      discardConfirmResolve = null;
+    }
+  };
+
+  cancelBtn.addEventListener("click", handleCancel);
+  discardBtn.addEventListener("click", handleDiscard);
+
+  discardConfirmBackdrop.addEventListener("mousedown", (e: MouseEvent) => {
+    if (e.target === discardConfirmBackdrop) {
+      handleCancel();
+    }
+  });
+
+  confirmWindow.addEventListener("click", (e: MouseEvent) => {
+    e.stopPropagation();
+  });
+
+  actions.appendChild(cancelBtn);
+  actions.appendChild(discardBtn);
+
+  confirmWindow.appendChild(header);
+  confirmWindow.appendChild(text);
+  confirmWindow.appendChild(actions);
+
+  discardConfirmBackdrop.appendChild(confirmWindow);
+  document.body.appendChild(discardConfirmBackdrop);
+}
+
+function promptDiscardConfirmation(): Promise<boolean> {
+  createDiscardConfirmDOM();
+  return new Promise((resolve) => {
+    discardConfirmResolve = resolve;
+    discardConfirmBackdrop?.classList.add("active");
+  });
+}
+
 export async function closeAnnotationModal(): Promise<void> {
   if (!modalBackdrop?.classList.contains("active")) return;
 
   if (isUnsaved) {
-    const discardConfirmed = confirm(
-      "You have unsaved changes. Do you really want to discard them and exit?"
-    );
+    const discardConfirmed = await promptDiscardConfirmation();
     if (!discardConfirmed) {
       return;
     }
   }
 
+  isUnsaved = false;
   modalBackdrop?.classList.remove("active");
   currentDetail = null;
 }

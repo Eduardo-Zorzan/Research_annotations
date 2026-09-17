@@ -206,6 +206,19 @@
   max-width: 100% !important;
 }
 
+.ce-block--selected {
+  background: transparent !important;
+}
+
+.ce-block--selected .ce-block__content {
+  background: rgba(59, 130, 246, 0.15) !important;
+  border-radius: 4px;
+}
+
+.editorjs_canvas_holder ::selection {
+  background: rgba(59, 130, 246, 0.25);
+}
+
 .ce-toolbar__content {
   max-width: 100% !important;
 }
@@ -347,6 +360,18 @@
 [data-theme="dark"] .ce-paragraph[data-placeholder]:empty::before {
   color: var(--color-text-secondary) !important;
   opacity: 0.6;
+}
+
+[data-theme="dark"] .ce-block--selected {
+  background: transparent !important;
+}
+
+[data-theme="dark"] .ce-block--selected .ce-block__content {
+  background: rgba(59, 130, 246, 0.28) !important;
+}
+
+[data-theme="dark"] .editorjs_canvas_holder ::selection {
+  background: rgba(59, 130, 246, 0.35);
 }
 
 .annotation_modal_footer {
