@@ -2,6 +2,11 @@ import { TableDetail } from "./tableDetails.js";
 
 declare const EditorJS: any;
 
+interface HistorySnapshot {
+  blocks: any[];
+  blockIndex: number;
+}
+
 let modalBackdrop: HTMLElement | null = null;
 let modalWindow: HTMLElement | null = null;
 let titleEl: HTMLElement | null = null;
@@ -20,6 +25,17 @@ let onSaveCallback: ((updatedDetail: TableDetail) => Promise<boolean | void>) | 
 let isMaximized: boolean = false;
 let discardConfirmBackdrop: HTMLElement | null = null;
 let discardConfirmResolve: ((value: boolean) => void) | null = null;
+
+let historyStack: HistorySnapshot[] = [];
+let historyIndex: number = -1;
+let savedHistoryIndex: number = 0;
+let debounceTimer: number | null = null;
+const DEBOUNCE_DELAY_MS: number = 750;
+const MAX_HISTORY_LENGTH: number = 50;
+
+let isEditorReady: boolean = false;
+let isApplyingHistory: boolean = false;
+let isSaving: boolean = false;
 
 function showToast(message: string): void {
   if (!toastEl) return;
@@ -40,6 +56,149 @@ function updateBadgeStatus(saved: boolean): void {
     badgeEl.textContent = "Unsaved changes";
     badgeEl.className = "annotation_modal_badge unsaved";
     isUnsaved = true;
+  }
+}
+
+function evaluateBadgeState(): void {
+  const isMatch = historyIndex === savedHistoryIndex;
+  updateBadgeStatus(isMatch);
+}
+
+function scheduleDebouncedSnapshot(): void {
+  if (debounceTimer !== null) {
+    window.clearTimeout(debounceTimer);
+  }
+  debounceTimer = window.setTimeout(async () => {
+    debounceTimer = null;
+    await captureSnapshot();
+  }, DEBOUNCE_DELAY_MS);
+}
+
+async function captureSnapshot(targetBlockIndex?: number): Promise<void> {
+  if (!editorInstance || isApplyingHistory || !isEditorReady) return;
+
+  try {
+    const data = await editorInstance.save();
+    const currentBlockIndex = targetBlockIndex !== undefined 
+      ? targetBlockIndex 
+      : (editorInstance.blocks?.getCurrentBlockIndex() ?? 0);
+
+    const newSnapshot: HistorySnapshot = {
+      blocks: data.blocks || [],
+      blockIndex: Math.max(0, currentBlockIndex),
+    };
+
+    if (historyStack.length > 0 && historyIndex >= 0) {
+      const current = historyStack[historyIndex];
+      if (JSON.stringify(current.blocks) === JSON.stringify(newSnapshot.blocks)) {
+        return;
+      }
+    }
+
+    if (historyIndex < historyStack.length - 1) {
+      historyStack.splice(historyIndex + 1);
+    }
+
+    historyStack.push(newSnapshot);
+    if (historyStack.length > MAX_HISTORY_LENGTH) {
+      historyStack.shift();
+      if (savedHistoryIndex > 0) {
+        savedHistoryIndex--;
+      } else {
+        savedHistoryIndex = -1;
+      }
+    }
+
+    historyIndex = historyStack.length - 1;
+    evaluateBadgeState();
+  } catch (_e) {}
+}
+
+async function restoreSnapshot(snapshot: HistorySnapshot): Promise<void> {
+  if (!editorInstance) return;
+
+  const currentData = await editorInstance.save();
+  const currentBlocks = currentData.blocks || [];
+  const targetBlocks = snapshot.blocks || [];
+
+  const isSameStructure =
+    currentBlocks.length === targetBlocks.length &&
+    currentBlocks.every((block: any, index: number) => {
+      const target = targetBlocks[index];
+      return block.id === target.id && block.type === target.type;
+    });
+
+  if (isSameStructure && typeof editorInstance.blocks?.update === "function") {
+    for (let i = 0; i < targetBlocks.length; i++) {
+      const currentBlock = currentBlocks[i];
+      const targetBlock = targetBlocks[i];
+      if (JSON.stringify(currentBlock.data) !== JSON.stringify(targetBlock.data)) {
+        await editorInstance.blocks.update(targetBlock.id, targetBlock.data);
+      }
+    }
+  } else {
+    if (editorHolderEl) {
+      editorHolderEl.style.minHeight = `${editorHolderEl.offsetHeight}px`;
+    }
+    await editorInstance.blocks.render({ blocks: targetBlocks });
+    requestAnimationFrame(() => {
+      if (editorHolderEl) {
+        editorHolderEl.style.minHeight = "";
+      }
+    });
+  }
+
+  const targetIndex = Math.min(snapshot.blockIndex, Math.max(0, targetBlocks.length - 1));
+  if (editorInstance.caret && typeof editorInstance.caret.setToBlock === "function") {
+    editorInstance.caret.setToBlock(targetIndex, "end");
+  }
+}
+
+async function performUndo(): Promise<void> {
+  if (!editorInstance || isApplyingHistory) return;
+
+  if (debounceTimer !== null) {
+    window.clearTimeout(debounceTimer);
+    debounceTimer = null;
+    await captureSnapshot();
+  }
+
+  if (historyIndex <= 0) return;
+
+  isApplyingHistory = true;
+  historyIndex--;
+  const snapshot = historyStack[historyIndex];
+
+  try {
+    await restoreSnapshot(snapshot);
+  } catch (_e) {
+  } finally {
+    isApplyingHistory = false;
+    evaluateBadgeState();
+  }
+}
+
+async function performRedo(): Promise<void> {
+  if (!editorInstance || isApplyingHistory) return;
+
+  if (debounceTimer !== null) {
+    window.clearTimeout(debounceTimer);
+    debounceTimer = null;
+    await captureSnapshot();
+  }
+
+  if (historyIndex >= historyStack.length - 1) return;
+
+  isApplyingHistory = true;
+  historyIndex++;
+  const snapshot = historyStack[historyIndex];
+
+  try {
+    await restoreSnapshot(snapshot);
+  } catch (_e) {
+  } finally {
+    isApplyingHistory = false;
+    evaluateBadgeState();
   }
 }
 
@@ -492,7 +651,8 @@ function createModalDOM(): void {
   hint.className = "annotation_modal_hint";
   const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
   const shortcutKey = isMac ? "⌘S" : "Ctrl+S";
-  hint.innerHTML = `<i class="fa-regular fa-keyboard"></i> Press <kbd>${shortcutKey}</kbd> to save &nbsp;|&nbsp; <kbd>Esc</kbd> to close`;
+  const undoKey = isMac ? "⌘Z" : "Ctrl+Z";
+  hint.innerHTML = `<i class="fa-regular fa-keyboard"></i> Press <kbd>${shortcutKey}</kbd> to save &nbsp;|&nbsp; <kbd>${undoKey}</kbd> to undo &nbsp;|&nbsp; <kbd>Esc</kbd> to close`;
 
   const footerActions = document.createElement("div");
   footerActions.className = "annotation_modal_actions";
@@ -566,19 +726,66 @@ function createModalDOM(): void {
     if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
       e.preventDefault();
       await saveAnnotation();
-    } else if (e.key === "Escape") {
+      return;
+    }
+
+    if (e.key === "Escape") {
       const openPopover = document.querySelector(".ce-popover--opened, .ce-inline-toolbar--showed");
-      if (openPopover) {
-        return;
-      }
+      if (openPopover) return;
       e.preventDefault();
       e.stopPropagation();
       await closeAnnotationModal();
+      return;
+    }
+
+    const target = e.target as HTMLElement | null;
+    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
+      return;
+    }
+
+    if (e.ctrlKey || e.metaKey) {
+      const isZ = e.key === "z" || e.key === "Z";
+      const isY = e.key === "y" || e.key === "Y";
+
+      if (isZ && !e.shiftKey) {
+        e.preventDefault();
+        await performUndo();
+        return;
+      } else if ((isZ && e.shiftKey) || isY) {
+        e.preventDefault();
+        await performRedo();
+        return;
+      }
+    }
+
+    if (e.key === "Enter" && !e.shiftKey) {
+      window.setTimeout(() => {
+        captureSnapshot();
+      }, 10);
     }
   });
 }
 
 async function initEditorInstance(initialData: any): Promise<void> {
+  isEditorReady = false;
+  isApplyingHistory = false;
+  isSaving = false;
+  historyStack = [];
+  historyIndex = -1;
+  savedHistoryIndex = 0;
+
+  if (debounceTimer !== null) {
+    window.clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
+
+  if (editorHolderEl && editorHolderEl.parentNode) {
+    editorHolderEl.dispatchEvent(new CustomEvent("destroy"));
+    const freshHolder = editorHolderEl.cloneNode(false) as HTMLElement;
+    editorHolderEl.parentNode.replaceChild(freshHolder, editorHolderEl);
+    editorHolderEl = freshHolder;
+  }
+
   if (editorInstance && typeof editorInstance.destroy === "function") {
     try {
       await editorInstance.destroy();
@@ -587,10 +794,7 @@ async function initEditorInstance(initialData: any): Promise<void> {
   }
 
   const editorGlobal = (window as any).EditorJS || (typeof EditorJS !== "undefined" ? EditorJS : null);
-  if (!editorGlobal || !editorHolderEl) {
-    console.error("EditorJS is not loaded from CDN.");
-    return;
-  }
+  if (!editorGlobal || !editorHolderEl) return;
 
   editorHolderEl.innerHTML = "";
 
@@ -603,15 +807,38 @@ async function initEditorInstance(initialData: any): Promise<void> {
     placeholder: "Type '/' for commands or start typing...",
     autofocus: true,
     onChange: () => {
+      if (!isEditorReady || isApplyingHistory || isSaving) return;
       updateBadgeStatus(false);
+      scheduleDebouncedSnapshot();
     },
   });
 
   await editorInstance.isReady;
+
+  if (!modalBackdrop?.classList.contains("active") || !editorInstance) return;
+
+  const baselineBlocks = initialData?.blocks || [];
+  historyStack = [{
+    blocks: JSON.parse(JSON.stringify(baselineBlocks)),
+    blockIndex: 0,
+  }];
+  historyIndex = 0;
+  savedHistoryIndex = 0;
+
+  isEditorReady = true;
+  updateBadgeStatus(true);
 }
 
 export async function saveAnnotation(): Promise<boolean> {
   if (!editorInstance || !currentDetail) return false;
+
+  if (debounceTimer !== null) {
+    window.clearTimeout(debounceTimer);
+    debounceTimer = null;
+    await captureSnapshot();
+  }
+
+  isSaving = true;
 
   try {
     const outputData = await editorInstance.save();
@@ -629,12 +856,27 @@ export async function saveAnnotation(): Promise<boolean> {
       await onSaveCallback(currentDetail);
     }
 
+    if (historyStack.length > 0 && historyIndex >= 0) {
+      historyStack[historyIndex] = {
+        blocks: outputData.blocks || [],
+        blockIndex: editorInstance.blocks?.getCurrentBlockIndex() ?? 0,
+      };
+    } else {
+      historyStack = [{
+        blocks: outputData.blocks || [],
+        blockIndex: 0,
+      }];
+      historyIndex = 0;
+    }
+
+    savedHistoryIndex = historyIndex;
     updateBadgeStatus(true);
     showToast("Note saved successfully!");
     return true;
-  } catch (err) {
-    console.error("Error saving EditorJS content:", err);
+  } catch (_err) {
     return false;
+  } finally {
+    isSaving = false;
   }
 }
 
@@ -749,12 +991,36 @@ function promptDiscardConfirmation(): Promise<boolean> {
 export async function closeAnnotationModal(): Promise<void> {
   if (!modalBackdrop?.classList.contains("active")) return;
 
+  if (debounceTimer !== null) {
+    window.clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
+
   if (isUnsaved) {
     const discardConfirmed = await promptDiscardConfirmation();
-    if (!discardConfirmed) {
-      return;
-    }
+    if (!discardConfirmed) return;
   }
+
+  isEditorReady = false;
+  isApplyingHistory = false;
+  isSaving = false;
+  historyStack = [];
+  historyIndex = -1;
+  savedHistoryIndex = 0;
+
+  if (editorHolderEl && editorHolderEl.parentNode) {
+    editorHolderEl.dispatchEvent(new CustomEvent("destroy"));
+    const freshHolder = editorHolderEl.cloneNode(false) as HTMLElement;
+    editorHolderEl.parentNode.replaceChild(freshHolder, editorHolderEl);
+    editorHolderEl = freshHolder;
+  }
+
+  if (editorInstance && typeof editorInstance.destroy === "function") {
+    try {
+      await editorInstance.destroy();
+    } catch (_e) {}
+  }
+  editorInstance = null;
 
   isUnsaved = false;
   modalBackdrop?.classList.remove("active");
