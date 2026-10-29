@@ -15,5 +15,5 @@ pub const BACKUP_IMPORT: &str = "/backup/import";
 pub const TOKENS: &str = "/tokens";
 pub const UPLOAD_IMAGE: &str = "/upload/image";
 pub const SERVE_IMAGE: &str = "/uploads/{user_id}/{filename}";
-
-
+pub const LOGOUT: &str = "/logout";
+pub const REVOKE_TOKENS: &str = "/tokens/revoke";

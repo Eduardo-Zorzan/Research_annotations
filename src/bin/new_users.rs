@@ -5,7 +5,7 @@ use std::io::{self, Write};
 use std::sync::{Arc, Mutex};
 
 use Project_tables::database::default;
-use Project_tables::helpers::encryption::{CryptoService, Keys};
+use Project_tables::helpers::password;
 use Project_tables::helpers::types::Conn;
 
 fn prompt(message: &str) -> String {
@@ -57,18 +57,10 @@ fn main() {
         std::process::exit(1);
     }
 
-    let crypto_service = match CryptoService::new(Keys::Login) {
-        Ok(service) => service,
+    let hashed_password = match password::hash(&password) {
+        Ok(hashed) => hashed,
         Err(err) => {
-            eprintln!("Error initializing encryption service: {err}");
-            std::process::exit(1);
-        }
-    };
-
-    let encrypted_password = match crypto_service.encrypt(password) {
-        Ok(encrypted) => encrypted,
-        Err(err) => {
-            eprintln!("Error encrypting password: {err}");
+            eprintln!("Error hashing password: {err}");
             std::process::exit(1);
         }
     };
@@ -77,7 +69,7 @@ fn main() {
         let db = conn.lock().unwrap();
         db.execute(
             "INSERT INTO users (name, password) VALUES (?1, ?2)",
-            params![&login, &encrypted_password],
+            params![&login, &hashed_password],
         )
         .expect("Failed to insert new user into database");
         db.last_insert_rowid()

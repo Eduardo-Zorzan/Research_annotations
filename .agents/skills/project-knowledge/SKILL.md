@@ -41,8 +41,8 @@ This skill maintains the cumulative architectural knowledge, guidelines, and des
    - Triggered via settings gear button (`#main-settings` / `.main_settings`) located on the top right corner.
    - **Appearance Section**: 3 preview cards for "Light", "Dark", and "System" themes. Themes are persisted in `localStorage` (`app_theme`), support OS `prefers-color-scheme` change listeners in "System" mode, and apply `[data-theme="dark"]` CSS variables.
    - **Backup Section**: Displays last backup datetime (`Backup Generated in {datetime}`), "Download" button to export a JSON backup, "Import" button to upload and restore JSON backup into SQLite in a transaction, and "Generate new backup" button to timestamp the backup.
-   - **Token Section**: "Create new token" button which calls `/tokens` for a stateless encrypted token with user ID and expiration, displaying a security notice and copy-to-clipboard button.
-   - **Account Section**: "Logout" button which deletes session cookie and redirects to login page (`/`).
+   - **Token Section**: "Create new token" button which calls `/tokens` for a stateless encrypted token with user ID and expiration, displaying a security notice and copy-to-clipboard button. "Revoke all tokens" button opens a confirmation dialog and calls `/tokens/revoke`.
+   - **Account Section**: "Logout" button which calls `POST /logout` (server clears the HttpOnly cookie) and redirects to login page (`/`).
 
 7. **Login Page Always Dark Mode**:
    - The login interface (`login.html` and `login.css`) is permanently set to dark mode (`data-theme="dark"`), using dark backgrounds, dark card styling, and dark input fields.
@@ -59,29 +59,33 @@ This skill maintains the cumulative architectural knowledge, guidelines, and des
 
 ### Backend (Rust / Axum / SQLite)
 - **Framework**: Axum 0.8 on Tokio multi-thread runtime.
-- **Database**: SQLite (`my_database.db`) using `rusqlite` bundled with mutex sharing (`Arc<Mutex<rusqlite::Connection>>`).
+- **Database**: SQLite (`my_database.db`) using `rusqlite` bundled with mutex sharing (`Arc<Mutex<rusqlite::Connection>>`). `create_default_tables` runs `PRAGMA foreign_keys = ON` and idempotent migrations (`add_column_if_missing`); schema changes must stay additive so existing deployed databases keep working.
 - **Static Assets**: Embedded into binary via `rust-embed` from `public/`.
 - **Default Binary**: `default-run = "Project_tables"` in `Cargo.toml`.
 - **CLI Utilities**: `src/bin/new_users.rs` (`cargo run --bin new_users`).
 
 #### Database Schema:
-- `users (id INTEGER PRIMARY KEY, name TEXT, password TEXT)`
+- `users (id INTEGER PRIMARY KEY, name TEXT, password TEXT, token_version INTEGER DEFAULT 0, session_version INTEGER DEFAULT 0)`
 - `tables (id INTEGER PRIMARY KEY, description TEXT, user_id INTEGER, position INTEGER DEFAULT 0)`
 - `table_details (id INTEGER PRIMARY KEY, table_id INTEGER, annotation TEXT, name TEXT, link TEXT, creation_date TEXT, position INTEGER DEFAULT 0)`
 - `backups (id INTEGER PRIMARY KEY, user_id INTEGER UNIQUE, created_at TEXT, file_path TEXT)`
 
 #### Cryptography & Authentication:
-- `CryptoService` uses AES-256-GCM (`aes-gcm` crate) with 12-byte random nonce and Base64 output.
-- `Keys::Login` (`LOGIN_KEY` in `.env`): Used for encrypting and decrypting user passwords in the `users` table.
-- `Keys::Token` (`TOKEN_KEY` in `.env`): Used for stateless token encryption/decryption containing `user_id` and `expired_at`. Tokens do not require database persistence.
-- `auth_middleware` (`src/handlers/auth.rs`): Applied to protected routes (`/home`, `/tables`, `/table_details`, `/backup/*`, `/tokens`) via `axum::middleware::from_fn`. Extracts session token from `Cookie` header (with `Authorization` header fallback) and validates expiration/signature. For unauthorized page navigations (`/home`), returns `Redirect::to("/")`; for unauthorized API requests, returns `401 Unauthorized`. Injects `AuthUser { user_id }` into request extensions for handlers.
+- `CryptoService` uses AES-256-GCM (`aes-gcm` crate) with 12-byte random nonce and Base64 output. Use `CryptoService::shared(Keys)` (cached `OnceLock`) in request paths instead of `CryptoService::new`.
+- **Passwords**: New passwords are Argon2id hashes (`helpers/password.rs`, `$argon2` prefix). Legacy AES-encrypted passwords (`LOGIN_KEY`) are still accepted, compared in constant time, and transparently re-hashed to Argon2 on the next successful login. `LOGIN_KEY` must stay configured until every user has logged in once. Failed logins are rate limited in memory per username (5 attempts, 5-minute lockout, `429`).
+- `Keys::Token` (`TOKEN_KEY` in `.env`): Encrypts stateless tokens and every table/detail ID returned by the API. Never rotate it: rotation invalidates all stored encrypted IDs and extension tokens.
+- **Token claims**: `{ expired_at, user_id, version, session? }`. `version` and `session` use `#[serde(default)]` so tokens issued before the change remain valid. `version` must equal `users.token_version` (bumped by `POST /tokens/revoke`); login tokens also carry `session`, which must equal `users.session_version` (bumped by `POST /logout`). Extension tokens have no `session`, so logout never revokes them.
+- **Session cookie**: Set by the server on `POST /login` as `token=...; HttpOnly; SameSite=Lax; Max-Age=4 weeks` (`Secure` when `X-Forwarded-Proto: https`) and cleared by `/logout` and `/tokens/revoke`. The frontend never reads or writes the token cookie.
+- `auth_middleware` (`src/handlers/auth.rs`): Applied to protected routes via `axum::middleware::from_fn_with_state`. Reads the token from `Authorization: Bearer` (precedence) or the `token` cookie, decrypts it, and checks expiry and token/session versions against the `users` row. For unauthorized page navigations (`/home`), returns `Redirect::to("/")`; for unauthorized API requests, returns `401 Unauthorized`. Injects `AuthUser { user_id }` into request extensions for handlers.
+- **Ownership**: Encrypted IDs are not an authorization boundary (SQLite reuses rowids of deleted rows). Every table/detail query must be scoped to `AuthUser.user_id` (`helpers/access.rs`: `decrypt_id`, `encrypt_id`, `ensure_table_owner`, `lock_db`, `db_error`). Rows owned by another user answer `404`; undecryptable IDs answer `400` (never `403`, which the frontend treats as logged out).
 
 #### Background Services:
-- **Hourly Automated Backups**: Tokio background worker running at a 1-hour interval that iterates through all registered users and updates their `./backups/{user_id}/backup.json` and database records without user intervention.
+- **Hourly Automated Backups**: Tokio background worker running at a 1-hour interval that calls `backup::backup_all_users` inside `spawn_blocking`. The DB mutex is only held while reading rows and recording the backup; image reading and JSON writing (`backup.json.tmp` then atomic rename) run without the lock.
 
 #### REST API Endpoints:
 - `GET /`: Serves login page (`login.html`).
-- `POST /login`: Authenticates username & password, decrypts password via `Keys::Login`, returns `{ "token": "..." }` encrypted with `Keys::Token`.
+- `POST /login`: Authenticates username & password (Argon2 or legacy AES), returns `{ "token": "..." }` and sets the HttpOnly session cookie.
+- `POST /logout`: Public. Ends all web sessions of the caller (bumps `session_version`) and clears the cookie.
 - `GET /home`: Serves home dashboard (`home.html`) through `auth_middleware` (redirects unauthenticated sessions to `/`).
 - `GET /tables`: Fetches tables for the authenticated user (`Extension<AuthUser>`) ordered by `position ASC, id ASC`.
 - `POST /tables`, `PUT /tables`, `DELETE /tables`: Manage table cards for authenticated user.
@@ -93,10 +97,12 @@ This skill maintains the cumulative architectural knowledge, guidelines, and des
 - `GET /backup/info`: Returns latest backup timestamp `{ "last_backup": "..." }` for authenticated user.
 - `POST /backup/generate`: Overwrites/saves `./backups/{user_id}/backup.json` and updates SQLite record.
 - `GET /backup/download`: Returns user's stored backup JSON file or 404 with error message if no backup exists on the server.
-- `POST /backup/import`: Wipes/replaces existing tables and details in an SQLite transaction with imported backup payload data, and extracts/restores embedded base64 images to `./uploads/{user_id}/` (with frontend confirmation modal before execution).
-- `POST /tokens`: Creates a new stateless encrypted token for authenticated user.
+- `POST /backup/import`: Decodes images first (`400` on invalid base64, silently skipping non-image filenames), stages them in `uploads/{user_id}.import`, replaces tables and details in an SQLite transaction, then swaps the staged folder in. Existing uploads are only replaced when the payload carries images.
+- `POST /tokens`: Creates a new stateless encrypted extension token (365 days) for authenticated user.
+- `POST /tokens/revoke`: Bumps `token_version`, invalidating every session and extension token of the user (including legacy tokens), and clears the cookie.
 - `POST /upload/image`: Receives multipart image data, compresses on client, saves to `./uploads/{user_id}/`, and returns `{ "success": 1, "file": { "url": "/uploads/{user_id}/{filename}" } }`.
-- `GET /uploads/:user_id/:filename`: Serves user-uploaded images through `auth_middleware`, validating user ownership (`auth_user.user_id == user_id`) with content type and cache headers.
+- `GET /uploads/:user_id/:filename`: Serves user-uploaded images through `auth_middleware`, validating user ownership (`auth_user.user_id == user_id`) and an image-extension allowlist (`uploads::is_stored_image_name`), with `X-Content-Type-Options: nosniff` and `Content-Security-Policy: ...; sandbox`. New uploads never keep the `svg` extension.
+- Static fallback (`assets::static_handler`) serves embedded `public/` files except `html/`, which is only reachable through `/` and `/home`. The single embedded `Asset` struct lives in `handlers/assets.rs` (`assets::html_page`).
 
 
 ---
@@ -106,13 +112,13 @@ This skill maintains the cumulative architectural knowledge, guidelines, and des
 - **Output**: `public/js/` (compiled with `npx tsc`)
 - **Modules**:
   - `login.ts`: Login form validation, async sign-in request, user session storage, error messaging.
-  - `cookies.ts`: Reusable cookie management utility (`setCookie`, `getCookie`, `deleteCookie`).
+  - `sanitize.ts`: `parseSafeHtml`, `sanitizeHtml`, and `sanitizeEditorData` strip script-capable tags, `on*` attributes, and `javascript:`/`vbscript:`/non-image `data:` URLs. Any stored annotation must go through `sanitizeEditorData` before `blocks.render`; never assign stored HTML to `innerHTML` directly.
   - `home.ts`: Layout initialization, sidebar toggle, resize handle, theme loading, config modal binding, and table loading.
   - `sidebar.ts`: Table card creation, inline renaming, deletion, drag-and-drop table reordering.
   - `tableDetails.ts`: Fixed columns (`Details`, `Name`, `Link`), row drag-and-drop reordering, inline cell editing, 3-dots row options. Long links exceeding 100 characters are truncated with an ellipsis and expand to full length on hover (tracked via `dataset.fullLink` to prevent polling re-renders). Keyed in-place DOM reconciliation (`syncTableDetails`) and real-time auto-checking (`checkForNewRows`) listening to window focus, document visibilitychange, and periodic polling (3.5s) to display new extension-added rows without losing active inline inputs, cursor positions, bottom new item drafts, or open modals.
   - `annotationModal.ts`: Resizable & maximizable rich text modal for notes using Editor.js, client-side canvas image downscaling/compression to WebP, and asynchronous image uploading. State getters (`isAnnotationModalOpen`, `getCurrentAnnotationDetailId`) protect ongoing note editing during table sync. Integrated with custom zero-lag History Engine supporting cross-platform `Cmd+Z` / `Ctrl+Z` undo and `Cmd+Shift+Z` / `Ctrl+Y` redo, deterministic badge state tracking via `historyIndex === savedHistoryIndex`, debounced snapshot captures, and leak-proof node cloning.
   - `blockEditor.ts`: Slash command / block editor module.
-  - `configModal.ts`: Settings/Configuration modal handling theme selection, backup operations (info, generate, download, import with replacement confirmation dialog), token generation & copying, and user logout.
+  - `configModal.ts`: Settings/Configuration modal handling theme selection, backup operations (info, generate, download, import with replacement confirmation dialog), token generation & copying, "Revoke all tokens" (confirmation dialog, `POST /tokens/revoke`), and logout (`POST /logout`). The confirmation dialog is generic: `showConfirmation({ title, text, actionHtml, busyHtml, onConfirm })`.
 
 ---
 

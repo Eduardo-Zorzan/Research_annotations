@@ -1,4 +1,5 @@
 import { TableDetail } from "./tableDetails.js";
+import { parseSafeHtml, sanitizeEditorData } from "./sanitize.js";
 
 declare const EditorJS: any;
 
@@ -280,12 +281,11 @@ function parseContentToEditorJSData(content: string | null): any {
   try {
     const parsed = JSON.parse(content);
     if (parsed && Array.isArray(parsed.blocks)) {
-      return parsed;
+      return sanitizeEditorData(parsed);
     }
   } catch (_e) {}
 
-  const tempDiv = document.createElement("div");
-  tempDiv.innerHTML = content;
+  const tempDiv = parseSafeHtml(content);
 
   const blocks: any[] = [];
   const children = Array.from(tempDiv.children);
@@ -363,11 +363,11 @@ function parseContentToEditorJSData(content: string | null): any {
     });
   }
 
-  return {
+  return sanitizeEditorData({
     time: Date.now(),
     blocks: blocks.length > 0 ? blocks : [{ type: "paragraph", data: { text: "" } }],
     version: "2.30.0",
-  };
+  });
 }
 
 function buildEditorJSTools(): any {

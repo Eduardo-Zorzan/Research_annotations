@@ -17,8 +17,8 @@ use rusqlite::Connection;
 use crate::helpers::{
     routes::{
         BACKUP_DOWNLOAD, BACKUP_GENERATE, BACKUP_IMPORT, BACKUP_INFO, CHECK_TABLE_DETAILS,
-        GET_HOME, GET_LOGIN, GET_TABLE_DETAILS, GET_TABLES, LOGIN, REORDER_TABLE_DETAILS,
-        REORDER_TABLES, SERVE_IMAGE, TABLE_DETAILS, TABLES, TOKENS, UPLOAD_IMAGE,
+        GET_HOME, GET_LOGIN, GET_TABLE_DETAILS, GET_TABLES, LOGIN, LOGOUT, REORDER_TABLE_DETAILS,
+        REORDER_TABLES, REVOKE_TOKENS, SERVE_IMAGE, TABLE_DETAILS, TABLES, TOKENS, UPLOAD_IMAGE,
     },
     types::Conn,
 };
@@ -53,14 +53,19 @@ async fn main() {
         .route(BACKUP_DOWNLOAD, get(backup::download))
         .route(BACKUP_IMPORT, post(backup::import))
         .route(TOKENS, post(tokens::create_token))
+        .route(REVOKE_TOKENS, post(tokens::revoke_all))
         .route(UPLOAD_IMAGE, post(uploads::upload_image))
         .route(SERVE_IMAGE, get(uploads::serve_image))
-        .layer(axum::middleware::from_fn(auth::auth_middleware));
+        .layer(axum::middleware::from_fn_with_state(
+            conn.clone(),
+            auth::auth_middleware,
+        ));
 
     let app = Router::new()
         .merge(protected_routes)
         .route(GET_LOGIN, get(login::get_login))
         .route(LOGIN, post(login::post))
+        .route(LOGOUT, post(login::logout))
         .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
         .layer(axum::middleware::from_fn(cors_middleware))
         .with_state(conn)
@@ -114,18 +119,8 @@ fn create_backup_routine(conn: Conn) {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
         loop {
             interval.tick().await;
-            if let Ok(guard) = conn.lock() {
-                let user_ids: Vec<i64> = match guard.prepare("SELECT id FROM users") {
-                    Ok(mut stmt) => match stmt.query_map([], |row| row.get(0)) {
-                        Ok(rows) => rows.filter_map(Result::ok).collect(),
-                        Err(_) => Vec::new(),
-                    },
-                    Err(_) => Vec::new(),
-                };
-                for uid in user_ids {
-                    let _ = backup::perform_backup_for_user(&guard, uid);
-                }
-            }
+            let conn = conn.clone();
+            let _ = tokio::task::spawn_blocking(move || backup::backup_all_users(&conn)).await;
         }
     });
 }

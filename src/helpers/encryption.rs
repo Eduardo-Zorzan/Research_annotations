@@ -5,9 +5,14 @@ use aes_gcm::{
 use base64::{Engine, prelude::BASE64_STANDARD};
 use dotenvy::dotenv;
 use std::env;
+use std::sync::OnceLock;
 
 const NONCE_SIZE: usize = 12;
 
+static TOKEN_SERVICE: OnceLock<Option<CryptoService>> = OnceLock::new();
+static LOGIN_SERVICE: OnceLock<Option<CryptoService>> = OnceLock::new();
+
+#[derive(Clone, Copy)]
 pub enum Keys {
     Token,
     Login,
@@ -42,6 +47,21 @@ impl CryptoService {
             .map_err(|e| format!("Failed to create cipher: {e}"))?;
 
         Ok(Self { cipher })
+    }
+
+    pub fn shared(key: Keys) -> Option<&'static CryptoService> {
+        let cell = match key {
+            Keys::Token => &TOKEN_SERVICE,
+            Keys::Login => &LOGIN_SERVICE,
+        };
+        cell.get_or_init(|| match CryptoService::new(key) {
+            Ok(service) => Some(service),
+            Err(err) => {
+                eprintln!("Error initializing {} cipher: {err}", key.as_str());
+                None
+            }
+        })
+        .as_ref()
     }
 
     pub fn encrypt(&self, plaintext: String) -> Result<String, Box<dyn std::error::Error>> {

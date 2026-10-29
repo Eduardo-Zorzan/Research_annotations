@@ -1,5 +1,3 @@
-import { deleteCookie } from "./cookies.js";
-
 let modalBackdrop: HTMLElement | null = null;
 let modalWindow: HTMLElement | null = null;
 let closeBtn: HTMLButtonElement | null = null;
@@ -10,6 +8,7 @@ let generateBackupBtn: HTMLButtonElement | null = null;
 let importBackupBtn: HTMLButtonElement | null = null;
 let importFileInput: HTMLInputElement | null = null;
 let createTokenBtn: HTMLButtonElement | null = null;
+let revokeTokensBtn: HTMLButtonElement | null = null;
 let tokenResultContainer: HTMLElement | null = null;
 let tokenInput: HTMLInputElement | null = null;
 let copyTokenBtn: HTMLButtonElement | null = null;
@@ -166,6 +165,16 @@ let confirmBackdrop: HTMLElement | null = null;
 let confirmWindow: HTMLElement | null = null;
 let confirmCancelBtn: HTMLButtonElement | null = null;
 let confirmActionBtn: HTMLButtonElement | null = null;
+let confirmTitleEl: HTMLElement | null = null;
+let confirmTextEl: HTMLElement | null = null;
+
+interface ConfirmOptions {
+  title: string;
+  text: string;
+  actionHtml: string;
+  busyHtml: string;
+  onConfirm: () => Promise<boolean>;
+}
 
 function createConfirmModalDOM(): void {
   if (confirmBackdrop) return;
@@ -182,17 +191,14 @@ function createConfirmModalDOM(): void {
   const icon = document.createElement("i");
   icon.className = "fa-solid fa-triangle-exclamation confirm_modal_icon";
 
-  const title = document.createElement("h3");
-  title.className = "confirm_modal_title";
-  title.textContent = "Replace All Existing Data?";
+  confirmTitleEl = document.createElement("h3");
+  confirmTitleEl.className = "confirm_modal_title";
 
   header.appendChild(icon);
-  header.appendChild(title);
+  header.appendChild(confirmTitleEl);
 
-  const text = document.createElement("p");
-  text.className = "confirm_modal_text";
-  text.textContent =
-    "Importing this backup will permanently delete all your existing tables and notes, replacing them with the imported data. Are you sure you want to proceed?";
+  confirmTextEl = document.createElement("p");
+  confirmTextEl.className = "confirm_modal_text";
 
   const actions = document.createElement("div");
   actions.className = "confirm_modal_actions";
@@ -205,21 +211,24 @@ function createConfirmModalDOM(): void {
   confirmActionBtn = document.createElement("button");
   confirmActionBtn.type = "button";
   confirmActionBtn.className = "config_btn config_btn--danger";
-  confirmActionBtn.innerHTML = '<i class="fa-solid fa-file-import"></i> Replace & Import';
 
   actions.appendChild(confirmCancelBtn);
   actions.appendChild(confirmActionBtn);
 
   confirmWindow.appendChild(header);
-  confirmWindow.appendChild(text);
+  confirmWindow.appendChild(confirmTextEl);
   confirmWindow.appendChild(actions);
   confirmBackdrop.appendChild(confirmWindow);
   document.body.appendChild(confirmBackdrop);
 }
 
-function showImportConfirmation(payload: any): void {
+function showConfirmation(options: ConfirmOptions): void {
   createConfirmModalDOM();
-  if (!confirmBackdrop || !confirmCancelBtn || !confirmActionBtn) return;
+  if (!confirmBackdrop || !confirmCancelBtn || !confirmActionBtn || !confirmTitleEl || !confirmTextEl) return;
+
+  confirmTitleEl.textContent = options.title;
+  confirmTextEl.textContent = options.text;
+  confirmActionBtn.innerHTML = options.actionHtml;
 
   const closeConfirm = () => {
     confirmBackdrop?.classList.remove("active");
@@ -232,29 +241,16 @@ function showImportConfirmation(payload: any): void {
   const handleConfirm = async () => {
     if (!confirmActionBtn) return;
     confirmActionBtn.disabled = true;
-    confirmActionBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Importing...';
+    confirmActionBtn.innerHTML = options.busyHtml;
 
     try {
-      const res = await fetch("/backup/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (res.ok) {
-        showToast("Backup imported and data replaced successfully!");
-        onDataChangedCallback?.();
-        fetchBackupInfo();
+      if (await options.onConfirm()) {
         closeConfirm();
-      } else {
-        showToast("Failed to import backup");
       }
-    } catch (_) {
-      showToast("Failed to import backup");
     } finally {
       if (confirmActionBtn) {
         confirmActionBtn.disabled = false;
-        confirmActionBtn.innerHTML = '<i class="fa-solid fa-file-import"></i> Replace & Import';
+        confirmActionBtn.innerHTML = options.actionHtml;
       }
     }
   };
@@ -278,6 +274,53 @@ function showImportConfirmation(payload: any): void {
   });
 
   confirmBackdrop.classList.add("active");
+}
+
+function showImportConfirmation(payload: any): void {
+  showConfirmation({
+    title: "Replace All Existing Data?",
+    text: "Importing this backup will permanently delete all your existing tables and notes, replacing them with the imported data. Are you sure you want to proceed?",
+    actionHtml: '<i class="fa-solid fa-file-import"></i> Replace & Import',
+    busyHtml: '<i class="fa-solid fa-circle-notch fa-spin"></i> Importing...',
+    onConfirm: async () => {
+      try {
+        const res = await fetch("/backup/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+          showToast("Backup imported and data replaced successfully!");
+          onDataChangedCallback?.();
+          fetchBackupInfo();
+          return true;
+        }
+      } catch (_) {}
+      showToast("Failed to import backup");
+      return false;
+    },
+  });
+}
+
+function showRevokeTokensConfirmation(): void {
+  showConfirmation({
+    title: "Revoke All Tokens?",
+    text: "This signs you out everywhere and invalidates every extension token you have created. You will need to sign in again and create a new token for the extension. Are you sure you want to proceed?",
+    actionHtml: '<i class="fa-solid fa-ban"></i> Revoke All',
+    busyHtml: '<i class="fa-solid fa-circle-notch fa-spin"></i> Revoking...',
+    onConfirm: async () => {
+      try {
+        const res = await fetch("/tokens/revoke", { method: "POST" });
+        if (res.ok) {
+          window.location.href = "/";
+          return true;
+        }
+      } catch (_) {}
+      showToast("Failed to revoke tokens");
+      return false;
+    },
+  });
 }
 
 async function handleFileImport(event: Event): Promise<void> {
@@ -349,8 +392,10 @@ async function handleCopyToken(): Promise<void> {
   }
 }
 
-function handleLogout(): void {
-  deleteCookie("token");
+async function handleLogout(): Promise<void> {
+  try {
+    await fetch("/logout", { method: "POST" });
+  } catch (_) {}
   window.location.href = "/";
 }
 
@@ -569,7 +614,14 @@ function createConfigModalDOM(): void {
   createTokenBtn.innerHTML = '<i class="fa-solid fa-key"></i> Create new token';
   createTokenBtn.addEventListener("click", handleCreateToken);
 
+  revokeTokensBtn = document.createElement("button");
+  revokeTokensBtn.type = "button";
+  revokeTokensBtn.className = "config_btn config_btn--secondary";
+  revokeTokensBtn.innerHTML = '<i class="fa-solid fa-ban"></i> Revoke all tokens';
+  revokeTokensBtn.addEventListener("click", showRevokeTokensConfirmation);
+
   tokenActions.appendChild(createTokenBtn);
+  tokenActions.appendChild(revokeTokensBtn);
 
   tokenResultContainer = document.createElement("div");
   tokenResultContainer.className = "config_token_result";

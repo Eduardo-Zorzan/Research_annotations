@@ -1,3 +1,4 @@
+import { parseSafeHtml, sanitizeEditorData } from "./sanitize.js";
 let modalBackdrop = null;
 let modalWindow = null;
 let titleEl = null;
@@ -248,12 +249,11 @@ function parseContentToEditorJSData(content) {
     try {
         const parsed = JSON.parse(content);
         if (parsed && Array.isArray(parsed.blocks)) {
-            return parsed;
+            return sanitizeEditorData(parsed);
         }
     }
     catch (_e) { }
-    const tempDiv = document.createElement("div");
-    tempDiv.innerHTML = content;
+    const tempDiv = parseSafeHtml(content);
     const blocks = [];
     const children = Array.from(tempDiv.children);
     if (children.length === 0 && tempDiv.textContent?.trim()) {
@@ -335,11 +335,11 @@ function parseContentToEditorJSData(content) {
             }
         });
     }
-    return {
+    return sanitizeEditorData({
         time: Date.now(),
         blocks: blocks.length > 0 ? blocks : [{ type: "paragraph", data: { text: "" } }],
         version: "2.30.0",
-    };
+    });
 }
 function buildEditorJSTools() {
     const w = window;

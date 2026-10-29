@@ -1,6 +1,3 @@
-import { setCookie, getCookie, deleteCookie } from "./cookies.js";
-
-
 export function initPasswordToggle(
   passwordInput: HTMLInputElement,
   toggleBtn: HTMLButtonElement,
@@ -89,20 +86,13 @@ export function initLoginForm(
         });
 
         if (response.ok) {
-          const data = await response.json();
-
-          setCookie("token", data.token, {
-            days: 14,
-            path: "/",
-            sameSite: "Lax",
-            secure: window.location.protocol === "https:",
-          });
-
           window.location.href = "/home";
           return;
         }
 
-        if (response.status === 401) {
+        if (response.status === 429) {
+          showError("Too many failed attempts. Please try again in a few minutes.");
+        } else if (response.status === 401) {
           showError("Invalid login or password.");
           usernameInput.classList.add("input-error");
           passwordInput.classList.add("input-error");

@@ -8,7 +8,10 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
 use crate::handlers::auth::AuthUser;
-use crate::helpers::{self, encryption::CryptoService};
+use crate::helpers::{
+    access::{db_error, decrypt_id, encrypt_id, lock_db},
+    types::Conn,
+};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TableReturn {
@@ -30,59 +33,37 @@ pub struct ReorderTablesPayload {
 
 #[axum::debug_handler]
 pub async fn get(
-    State(conn): State<helpers::types::Conn>,
+    State(conn): State<Conn>,
     Extension(auth_user): Extension<AuthUser>,
 ) -> Result<Json<Vec<TableReturn>>, StatusCode> {
-    let Ok(_conn) = conn.lock() else {
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    };
+    let conn = lock_db(&conn)?;
 
-    let crypto_service = match CryptoService::new(helpers::encryption::Keys::Token) {
-        Ok(crypto) => crypto,
-        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-    };
-
-    let mut stmt = match _conn.prepare(
-        "
+    let mut stmt = conn
+        .prepare(
+            "
             SELECT id, description, position
             FROM tables
             WHERE user_id = ?1
             ORDER BY position ASC, id ASC
         ",
-    ) {
-        Ok(stmt) => stmt,
-        Err(err) => {
-            println!("Error on prepare select tables: {}", err);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        }
-    };
+        )
+        .map_err(|err| db_error("Error on prepare select tables", err))?;
 
-    let rows = match stmt.query_map(params![auth_user.user_id], |row| {
-        Ok((
-            row.get::<_, i32>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, Option<i32>>(2)?,
-        ))
-    }) {
-        Ok(rows) => rows,
-        Err(err) => {
-            println!("Error querying tables: {}", err);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        }
-    };
+    let rows = stmt
+        .query_map(params![auth_user.user_id], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<i32>>(2)?,
+            ))
+        })
+        .map_err(|err| db_error("Error querying tables", err))?;
 
     let mut tables = Vec::new();
     for row in rows {
-        let (id, description, position) = match row {
-            Ok(data) => data,
-            Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-        };
-        let id_encrypted = match crypto_service.encrypt(id.to_string()) {
-            Ok(enc) => enc,
-            Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-        };
+        let (id, description, position) = row.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         tables.push(TableReturn {
-            id: id_encrypted,
+            id: encrypt_id(id)?,
             description,
             position,
         });
@@ -93,20 +74,13 @@ pub async fn get(
 
 #[axum::debug_handler]
 pub async fn post(
-    State(conn): State<helpers::types::Conn>,
+    State(conn): State<Conn>,
     Extension(auth_user): Extension<AuthUser>,
     Json(payload): Json<Table>,
 ) -> Result<(StatusCode, Json<TableReturn>), StatusCode> {
-    let Ok(_conn) = conn.lock() else {
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    };
+    let conn = lock_db(&conn)?;
 
-    let crypto_service = match CryptoService::new(helpers::encryption::Keys::Token) {
-        Ok(crypto) => crypto,
-        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-    };
-
-    let next_position: i32 = _conn
+    let next_position: i32 = conn
         .query_row(
             "SELECT COALESCE(MAX(position), 0) + 1 FROM tables WHERE user_id = ?1",
             params![auth_user.user_id],
@@ -114,160 +88,91 @@ pub async fn post(
         )
         .unwrap_or(1);
 
-    match _conn.query_row(
-        "
+    let (id, pos) = conn
+        .query_row(
+            "
             INSERT INTO tables (description, user_id, position)
             VALUES (?1, ?2, ?3)
             RETURNING id, position
         ",
-        params![payload.description, auth_user.user_id, next_position],
-        |row| Ok((row.get::<_, i32>(0)?, row.get::<_, i32>(1)?)),
-    ) {
-        Ok((id, pos)) => {
-            let id_encrypted = match crypto_service.encrypt(id.to_string()) {
-                Ok(enc) => enc,
-                Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-            };
-            Ok((
-                StatusCode::CREATED,
-                Json(TableReturn {
-                    id: id_encrypted,
-                    description: payload.description,
-                    position: Some(pos),
-                }),
-            ))
-        }
-        Err(_err) => {
-            println!("Error on insert table, error: {}", _err);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
-    }
+            params![payload.description, auth_user.user_id, next_position],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i32>(1)?)),
+        )
+        .map_err(|err| db_error("Error on insert table", err))?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(TableReturn {
+            id: encrypt_id(id)?,
+            description: payload.description,
+            position: Some(pos),
+        }),
+    ))
 }
 
 #[axum::debug_handler]
 pub async fn put(
-    State(conn): State<helpers::types::Conn>,
+    State(conn): State<Conn>,
+    Extension(auth_user): Extension<AuthUser>,
     Json(payload): Json<Table>,
 ) -> Result<StatusCode, StatusCode> {
-    let Ok(_conn) = conn.lock() else {
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    };
+    let id = decrypt_id(payload.id.ok_or(StatusCode::BAD_REQUEST)?)?;
 
-    let crypto_service = match CryptoService::new(helpers::encryption::Keys::Token) {
-        Ok(crypto) => crypto,
-        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-    };
-
-    let Some(id_enc) = payload.id else {
-        return Err(StatusCode::BAD_REQUEST);
-    };
-
-    let id_decrypted: String = match crypto_service.decrypt(id_enc) {
-        Ok(id) => id,
-        Err(_) => return Err(StatusCode::BAD_REQUEST),
-    };
-
-    match _conn.execute(
-        "
-            UPDATE tables
-            SET description = ?1
-            WHERE id = ?2
-        ",
-        params![payload.description, id_decrypted],
+    match lock_db(&conn)?.execute(
+        "UPDATE tables SET description = ?1 WHERE id = ?2 AND user_id = ?3",
+        params![payload.description, id, auth_user.user_id],
     ) {
         Ok(0) => Err(StatusCode::NOT_FOUND),
         Ok(_) => Ok(StatusCode::OK),
-        Err(_err) => {
-            println!("Error on update table, error: {}", _err);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
+        Err(err) => Err(db_error("Error on update table", err)),
     }
 }
 
 #[axum::debug_handler]
 pub async fn reorder(
-    State(conn): State<helpers::types::Conn>,
+    State(conn): State<Conn>,
+    Extension(auth_user): Extension<AuthUser>,
     Json(payload): Json<ReorderTablesPayload>,
 ) -> Result<StatusCode, StatusCode> {
-    let Ok(mut _conn) = conn.lock() else {
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    };
+    let ids = payload
+        .ids
+        .into_iter()
+        .map(decrypt_id)
+        .collect::<Result<Vec<i64>, StatusCode>>()?;
 
-    let crypto_service = match CryptoService::new(helpers::encryption::Keys::Token) {
-        Ok(crypto) => crypto,
-        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-    };
+    let mut conn = lock_db(&conn)?;
+    let tx = conn
+        .transaction()
+        .map_err(|err| db_error("Error starting transaction for table reorder", err))?;
 
-    let mut decrypted_ids = Vec::new();
-    for id_enc in payload.ids {
-        let id_decrypted: String = match crypto_service.decrypt(id_enc) {
-            Ok(id) => id,
-            Err(_) => return Err(StatusCode::BAD_REQUEST),
-        };
-        decrypted_ids.push(id_decrypted);
+    for (index, id) in ids.iter().enumerate() {
+        tx.execute(
+            "UPDATE tables SET position = ?1 WHERE id = ?2 AND user_id = ?3",
+            params![(index + 1) as i32, id, auth_user.user_id],
+        )
+        .map_err(|err| db_error(&format!("Error updating position for table id {id}"), err))?;
     }
 
-    let tx = match _conn.transaction() {
-        Ok(tx) => tx,
-        Err(err) => {
-            println!("Error starting transaction for table reorder: {}", err);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        }
-    };
-
-    for (index, id) in decrypted_ids.iter().enumerate() {
-        let pos = (index + 1) as i32;
-        if let Err(err) = tx.execute(
-            "UPDATE tables SET position = ?1 WHERE id = ?2",
-            params![pos, id],
-        ) {
-            println!("Error updating position for table id {}: {}", id, err);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    if let Err(err) = tx.commit() {
-        println!("Error committing table reorder transaction: {}", err);
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    }
+    tx.commit()
+        .map_err(|err| db_error("Error committing table reorder transaction", err))?;
 
     Ok(StatusCode::OK)
 }
 
 #[axum::debug_handler]
 pub async fn delete(
-    State(conn): State<helpers::types::Conn>,
+    State(conn): State<Conn>,
+    Extension(auth_user): Extension<AuthUser>,
     Json(payload): Json<Table>,
 ) -> Result<StatusCode, StatusCode> {
-    let Ok(_conn) = conn.lock() else {
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    };
+    let id = decrypt_id(payload.id.ok_or(StatusCode::BAD_REQUEST)?)?;
 
-    let crypto_service = match CryptoService::new(helpers::encryption::Keys::Token) {
-        Ok(crypto) => crypto,
-        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-    };
-
-    let Some(id_enc) = payload.id else {
-        return Err(StatusCode::BAD_REQUEST);
-    };
-
-    let id_decrypted: String = match crypto_service.decrypt(id_enc) {
-        Ok(id) => id,
-        Err(_) => return Err(StatusCode::BAD_REQUEST),
-    };
-
-    match _conn.execute(
-        "
-            DELETE FROM tables
-            WHERE id = ?1;
-        ",
-        params![id_decrypted],
+    match lock_db(&conn)?.execute(
+        "DELETE FROM tables WHERE id = ?1 AND user_id = ?2",
+        params![id, auth_user.user_id],
     ) {
+        Ok(0) => Err(StatusCode::NOT_FOUND),
         Ok(_) => Ok(StatusCode::OK),
-        Err(_err) => {
-            println!("Error on delete table, error: {}", _err);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
+        Err(err) => Err(db_error("Error on delete table", err)),
     }
 }

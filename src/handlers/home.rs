@@ -1,13 +1,7 @@
-use axum::response::{Html, IntoResponse};
-use rust_embed::Embed;
+use axum::response::IntoResponse;
 
-#[derive(Embed)]
-#[folder = "public"]
-struct Asset;
+use crate::handlers::assets;
 
 pub async fn get_home() -> impl IntoResponse {
-    match Asset::get("html/home.html") {
-        Some(content) => Html(content.data.into_owned()),
-        None => Html(b"<h1>Not Found</h1>".to_vec()),
-    }
+    assets::html_page("html/home.html")
 }

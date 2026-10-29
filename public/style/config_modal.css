@@ -394,6 +394,8 @@
 
 .config_token_actions {
   display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   justify-content: center;
 }
 

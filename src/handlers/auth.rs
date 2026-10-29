@@ -1,7 +1,11 @@
-use crate::helpers::{routes::GET_LOGIN, token};
+use crate::helpers::{
+    routes::GET_LOGIN,
+    token::{self, Token},
+    types::Conn,
+};
 use axum::{
-    extract::Request,
-    http::{StatusCode, header},
+    extract::{Request, State},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
     middleware::Next,
     response::{IntoResponse, Redirect, Response},
 };
@@ -31,54 +35,59 @@ fn url_decode(input: &str) -> String {
     String::from_utf8(output).unwrap_or_else(|_| input.to_string())
 }
 
-pub async fn auth_middleware(mut request: Request, next: Next) -> Response {
-    let cookie_header = request
-        .headers()
-        .get(header::COOKIE)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
-
-    let token_from_cookie = cookie_header.split(';').find_map(|cookie| {
-        let mut parts = cookie.trim().splitn(2, '=');
-        let name = parts.next()?;
-        let val = parts.next()?;
-        if name == "token" {
-            Some(url_decode(val))
-        } else {
-            None
-        }
-    });
-
-    let token_from_header = request
-        .headers()
+pub fn request_token(headers: &HeaderMap) -> Option<String> {
+    let token_from_header = headers
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .map(|raw| url_decode(raw.strip_prefix("Bearer ").unwrap_or(raw)));
 
-    let token_str = token_from_header.or(token_from_cookie);
+    token_from_header.or_else(|| {
+        headers
+            .get(header::COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .split(';')
+            .find_map(|cookie| {
+                let (name, val) = cookie.trim().split_once('=')?;
+                (name == "token").then(|| url_decode(val))
+            })
+    })
+}
 
-    let is_page_request = request
-        .headers()
-        .get(header::ACCEPT)
+pub fn authenticate(conn: &Conn, raw_token: String) -> Option<Token> {
+    let claims = token::verify_token(raw_token).ok()?;
+    let guard = conn.lock().ok()?;
+    let versions = token::user_token_versions(&guard, claims.user_id).ok()?;
+    token::is_token_current(&claims, &versions).then_some(claims)
+}
+
+pub fn session_cookie(headers: &HeaderMap, value: &str, max_age_secs: i64) -> HeaderValue {
+    let is_https = headers
+        .get("x-forwarded-proto")
         .and_then(|v| v.to_str().ok())
-        .map(|v| v.contains("text/html"))
-        .unwrap_or(false);
+        .is_some_and(|proto| proto.eq_ignore_ascii_case("https"));
+    let secure = if is_https { "; Secure" } else { "" };
+    HeaderValue::from_str(&format!(
+        "token={value}; Path=/; Max-Age={max_age_secs}; HttpOnly; SameSite=Lax{secure}"
+    ))
+    .unwrap_or_else(|_| HeaderValue::from_static("token=; Path=/; Max-Age=0"))
+}
 
-    let Some(raw_token) = token_str else {
+pub async fn auth_middleware(State(conn): State<Conn>, mut request: Request, next: Next) -> Response {
+    let user_id = request_token(request.headers())
+        .and_then(|raw_token| authenticate(&conn, raw_token))
+        .map(|claims| claims.user_id);
+
+    let Some(user_id) = user_id else {
+        let is_page_request = request
+            .headers()
+            .get(header::ACCEPT)
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|v| v.contains("text/html"));
         if is_page_request {
             return Redirect::to(GET_LOGIN).into_response();
         }
         return StatusCode::UNAUTHORIZED.into_response();
-    };
-
-    let user_id = match token::verify_token(raw_token) {
-        Ok(id) => id,
-        Err(_) => {
-            if is_page_request {
-                return Redirect::to(GET_LOGIN).into_response();
-            }
-            return StatusCode::UNAUTHORIZED.into_response();
-        }
     };
 
     request.extensions_mut().insert(AuthUser { user_id });
